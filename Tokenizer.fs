@@ -58,13 +58,28 @@ module Tokenizer
         | _ -> (helper (code.Substring 1) tokens)
     let res = (helper s [])
     List.rev res
+  
+  let tokenToXml token = 
+    match token with
+      | Keyword w -> "<keyword> " + w + " </keyword>"
+      | Symbol ch -> 
+        let chString =
+          match ch with 
+            | '<' -> "&lt;"
+            | '>' -> "&gt;"
+            | '"' -> "&quot;"
+            | '&' -> "&amp;"
+            | ch -> string ch
+        "<symbol> " + chString + " </symbol>"
+      | Identifier w -> "<identifier> " + w + " </identifier>"
+      | IntConstant i -> "<integerConstant> " + (string i) + " </integerConstant>"
+      | StringConstant s -> "<stringConstant> " + s + " </stringConstant>"
+
 
   let s = """ if (x < 0) {
            //handles the sign
-    let sign = "negative";
-  }"""
+    let sign = "negative"; }"""
 
-     
 //  printfn "%s" (getNextKeywordOrIdentifier "doggo_doggo= 45") 
 //  printfn "%s" (getNextKeywordOrIdentifier """_knife23{}""") 
 //  printfn "%s" (advanceUntilChar 'x' s) 

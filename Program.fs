@@ -6,7 +6,7 @@ let tokenizeFile fn =
   let outFn = Path.ChangeExtension(fn, ".xml")
   let text = File.ReadAllText fn
   let tokens = tokenize text
-  File.WriteAllText(outFn, text)
+  File.WriteAllLines(outFn, "<tokens>" :: (List.map tokenToXml  tokens) @ ["</tokens>"])
 
 [<EntryPoint>]
 let main args =
