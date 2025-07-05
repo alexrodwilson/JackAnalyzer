@@ -18,9 +18,9 @@ let main args =
       let jackFiles = Directory.GetFiles(fn, "*.jack")
       for f in jackFiles do 
         tokenizeFile f
-//        printfn "%s written" (Path.ChangeExtension f ".xml")
-    | fn when (File.Exists fn) && (Path.HasExtension ".jack") ->
+        printfn "%s written" (Path.ChangeExtension (f, ".xml"))
+    | fn when (File.Exists fn) && Path.GetExtension(fn) = ".jack" ->
       tokenizeFile fn
- //     printfn "%s written" (Path.ChangeExtension fn ".xml")
+      printfn "%s written" (Path.ChangeExtension(fn, ".xml"))
     | fn -> printfn "%s is not a valid file/directory" fn
   0
