@@ -1,10 +1,17 @@
 module Tokenizer 
+
+  type Keyword = string
+  type Symbol = char
+  type Identifier = string
+  type IntConstant = int
+  type StringConstant = string
+
   type Token = 
-    | Keyword of string
-    | Symbol of char
-    | Identifier of string
-    | IntConstant of int
-    | StringConstant of string
+    | Keyword of Keyword
+    | Symbol of Symbol
+    | Identifier of Identifier
+    | IntConstant of IntConstant
+    | StringConstant of StringConstant
 
   let keywords = set ["class"; "constructor"; "function"; "method"; "field"; "static"; "var"; "int"; "char"; "boolean"; "void"; "true"; "false"; "null"; "this"; "let"; "do"; "if"; "else"; "while"; "return"]
   let isControlChar ch = 
