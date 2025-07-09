@@ -1,9 +1,10 @@
 module CompilationEngine
 open Tokenizer
 
+
 type KeywordOrIdentifier =
-  | Keyword of Keyword
-  | Identifier of Identifier
+  | K of Keyword
+  | I of Identifier
 
 type ClassVarDec = 
   {
@@ -19,11 +20,13 @@ type Class =
   ClassVarDecs: ClassVarDec list;
   SubroutineDecs: SubroutineDec list;
   }
+
 and Parameter = 
   {
   Type: KeywordOrIdentifier;
   VarName: Identifier;
   }
+
 and VarDec = 
   {
   Type: KeywordOrIdentifier;
@@ -45,7 +48,6 @@ and SubroutineDec =
   ParameterList: Parameter list;
   SubroutineBody: SubroutineBody;
   }
-
 
 and LetStatement = 
   {
@@ -90,8 +92,8 @@ and Expression =
   }
 
 and Term = 
-  | IntConstant of IntConstant
-  | StringConstant of StringConstant
+  | IntConst of IntConstant
+  | StringConst of StringConstant
   | TrueFalseNullThis of Keyword
   | VarName of Identifier
   | ArrayExpression of ArrayExpression
@@ -127,6 +129,66 @@ and FunctionCall =
 and SubroutineCall =
   | FunctionCall of FunctionCall
   | MethodCall of MethodCall
+
+let deconstruct token = 
+  match token with 
+  | Symbol ch -> string ch
+  | Identifier i -> i
+  | Keyword k -> k
+  | StringConstant s -> s
+  | IntConstant i -> string i
+
+
+
+let eat (expectedToken: Token)  (tokens: Token list)  =
+    if tokens.Head = expectedToken then
+      tokens.Tail
+    else (failwith "bad token" ); tokens.Tail
+  
+let nextTokenAndState (tokens: Token list): (string * Token list) =
+   (deconstruct tokens.Head, tokens.Tail)
+(*
+let CompileClassVarDecs tokens : (ClassVarDec list * Token list) = 
+  ([], tokens)
+
+let CompileSubroutineDecs tokens = 
+  ([], tokens)
+
+let CompileClass tokens = 
+  let tokens  = eat (Keyword "class") tokens
+  let className, tokens = nextTokenAndState tokens
+  let tokens = eat (Symbol '{') tokens
+  let classVarDecs, tokens = CompileClassVarDecs tokens
+  let subroutineDecs, tokens = CompileSubroutineDecs tokens
+  let tokens = eat (Symbol '}') tokens
+  {  
+  ClassName = className;
+  ClassVarDecs = classVarDecs;
+  SubroutineDecs = subroutineDecs;
+  }
+  *)
+let CompileClassVarDecs tokens = 
+  ("sausage", tokens)
+
+let CompileSubroutineDecs tokens =
+  ("more sausages", tokens)
+
+let CompileClass tokens =
+  let tokens = eat (Keyword "class") tokens
+  let (className, tokens) = nextTokenAndState tokens
+  let tokens = eat (Symbol '{') tokens
+  let (classVarDec, tokens) = CompileClassVarDecs tokens
+  let (subroutineDec, tokens) = CompileSubroutineDecs tokens
+  let tokens = eat (Symbol '}') tokens
+  $$"""<class>
+  <keyword> class </keyword>
+  <identifier> {{(string className)}} </identifier>
+  <symbol> { </symbol>
+  {{classVarDec}}
+  {{subroutineDec}}
+</class>"""
+
+
 
 
   

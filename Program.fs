@@ -1,6 +1,7 @@
 ﻿// For more information see https://aka.ms/fsharp-console-apps
 open Tokenizer
 open System.IO
+open CompilationEngine
 
 let tokenizeFile fn = 
   let outFn = Path.ChangeExtension(fn, ".xml")
@@ -12,7 +13,7 @@ let tokenizeFile fn =
 let main args =
     //printfn "Arguments passed to function : %A" args
     // Return 0. This indicates success.
-  let fn = args[0]
+ (* let fn = args[0]
   match fn with
     | fn when Directory.Exists fn -> 
       let jackFiles = Directory.GetFiles(fn, "*.jack")
@@ -22,5 +23,8 @@ let main args =
     | fn when (File.Exists fn) && Path.GetExtension(fn) = ".jack" ->
       tokenizeFile fn
       printfn "%s written" (Path.ChangeExtension(fn, ".xml"))
-    | fn -> printfn "%s is not a valid file/directory" fn
+    | fn -> printfn "%s is not a valid file/directory" fn*)
+  let tokens = [(Keyword "class"); (Identifier "Main");
+    (Symbol '{'); (Symbol '}')]
+  printfn "%s" (CompileClass tokens)
   0
