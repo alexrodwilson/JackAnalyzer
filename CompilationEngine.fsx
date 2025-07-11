@@ -8,24 +8,24 @@ let deconstruct token =
   | IntConstant i -> (string i)
   | StringConstant s -> s
 
-let advanceUntil target tokens returnTarget = 
+let advanceUntil test tokens returnLastToken = 
   let rec aux toReturn remainingTokens =
     match remainingTokens with
-    | head::tail when head = target -> if returnTarget then
-                                        List.rev (head::toReturn), tail
-                                       else 
-                                        (List.rev toReturn), remainingTokens
+    | head::tail when test head -> if returnLastToken then
+                                    List.rev (head::toReturn), tail
+                                   else 
+                                    (List.rev toReturn), remainingTokens
     | head::tail -> aux (head::toReturn) tail
   aux [] tokens
 
 
-let getConsecutivePatterns startToken endToken tokens =
+let getConsecutivePatterns startTest endTest tokens =
   let rec aux patterns remainingTokens = 
     match remainingTokens with
     | [] -> List.rev patterns, remainingTokens
-    | head::tail when head <> startToken -> (List.rev patterns), remainingTokens
+    | head::tail when not (startTest head) -> (List.rev patterns), remainingTokens
     | head::tail ->
-      let pattern, remainingTokens = advanceUntil endToken remainingTokens true
+      let pattern, remainingTokens = advanceUntil endTest remainingTokens true
       aux (pattern::patterns) remainingTokens
   aux [] tokens
 
@@ -62,8 +62,9 @@ let isTypeProgramStructure xs =
   (isSameToken (Keyword "char") xs)||
   (isSameToken (Keyword "boolean") xs)
 
-let CompileClassVarDecs tokens =
-  let classVarDecPatterns, remainingTokens = getConsecutivePatterns (Keyword "static") (Symbol ';') tokens
+let CompileClassVarDecs tokens = 
+  let classVarDecPatterns, remainingTokens = getConsecutivePatterns (fun x -> x = (Keyword "static") || x = (Keyword "field")) (fun x -> x = (Symbol ';')) tokens
+
   let doOneDec listOfTokens =
     let staticOrField, listOfTokens = getNextTokenIf (isOneOfTokens [(Keyword "static"); (Keyword "field")]) listOfTokens 
     let typ, listOfTokens = getNextTokenIf isTypeProgramStructure listOfTokens
@@ -144,7 +145,7 @@ let classVarDecsTest = [
   Symbol ';'
 ]
 
-printfn "%A" (getConsecutivePatterns (Keyword "static") (Symbol ';') classVarDecsTest)
+printfn "%A" (getConsecutivePatterns (fun x -> x = (Keyword "static")) (fun x -> x = (Symbol ';')) classVarDecsTest)
 printfn "%A" (CompileClassVarDecs testTokens)
 printfn "%A" (CompileClassVarDecs classVarDecsTest)
 printfn "%A" ((isOneOfTokens [(Keyword "nut"); (Identifier "salad"); (Keyword "int"); (Symbol '{')]) [(Identifier "Point"); (Identifier "string")]) 
@@ -161,5 +162,5 @@ printfn "%A" (eatIf (isSameToken (Keyword "var")) testTokens)
 //printfn "%A" (getNextTokenIf (isSameToken (Identifier "var")) testTokens)
 printfn "%A" (getNextTokenIf (isSameToken (Keyword "var")) testTokens)
 printfn "%A" (getNextTokenIf (isSameType (Keyword "_")) testTokens)
-printfn "%A" (advanceUntil (Symbol ';') testTokens true)
-printfn "%A" (getConsecutivePatterns (Keyword "var") (Symbol ';') testTokens)
+printfn "%A" (advanceUntil (fun x -> x = (Symbol ';')) testTokens true)
+printfn "%A" (getConsecutivePatterns (fun x -> x = (Keyword "var")) (fun x -> x = (Symbol ';')) testTokens)
