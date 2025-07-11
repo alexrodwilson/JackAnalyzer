@@ -29,7 +29,7 @@ let getConsecutivePatterns startToken endToken tokens =
       aux (pattern::patterns) remainingTokens
   aux [] tokens
 
-let eatIf (test: Token list -> bool) (tokens: Token list): Token list =
+let eatIf (test: Token list -> bool) (tokens: Token list) =
   match tokens with
   | head::tail when (test tokens) -> tail
   | _ -> failwith "Bad Argument" 
@@ -44,17 +44,47 @@ let isSameToken (token: Token) =
 
 let typeToString token = 
   match token with
-  | Identifier _ -> "Identifier"
-  | Keyword _ -> "Keyword"
-  | Symbol _ -> "Symbol"
-  | IntConstant _ -> "IntConstant"
-  | StringConstant _ -> "StringConstant"
+  | Identifier _ -> "identifier"
+  | Keyword _ -> "keyword"
+  | Symbol _ -> "symbol"
+  | IntConstant _ -> "intConstant"
+  | StringConstant _ -> "stringConstant"
 
 let isSameType token = 
   fun (xs: Token list) -> (typeToString xs.Head) = (typeToString token)
 
+let isOneOfTokens (tokenList: Token list) = 
+  fun (xs: Token list) -> List.contains xs.Head tokenList
+
+let isTypeProgramStructure xs = 
+  (isSameType (Identifier "_") xs) || 
+  (isSameToken (Keyword "int") xs) ||
+  (isSameToken (Keyword "char") xs)||
+  (isSameToken (Keyword "boolean") xs)
+
 let CompileClassVarDecs tokens =
-  ("", tokens)
+  let classVarDecPatterns, remainingTokens = getConsecutivePatterns (Keyword "static") (Symbol ';') tokens
+  let doOneDec listOfTokens =
+    let staticOrField, listOfTokens = getNextTokenIf (isOneOfTokens [(Keyword "static"); (Keyword "field")]) listOfTokens 
+    let typ, listOfTokens = getNextTokenIf isTypeProgramStructure listOfTokens
+    let varName, listOfTokens = getNextTokenIf  (isSameType (Identifier "_")) listOfTokens
+    let otherVarsXml = listOfTokens |> List.map tokenToXml
+                                    |> List.reduce (fun x y -> x + "\n  " + y)
+    $$"""<classVarDec>
+  {{tokenToXml staticOrField}}
+  {{tokenToXml typ}}
+  {{tokenToXml varName}}
+  {{otherVarsXml}}
+</classVarDec>
+"""
+  match classVarDecPatterns with
+  | [] -> "", remainingTokens
+  | _ ->
+    let xml = classVarDecPatterns
+              |> List.map doOneDec
+              |> List.reduce (+)
+    (xml, remainingTokens)
+
 
 let CompileSubroutineDecs tokens =
   ("", tokens)
@@ -69,12 +99,19 @@ let CompileClass tokens =
  $$"""<class>
   <keyword> class </keyword>
   <keyword> {{deconstruct className}} </keyword>
-  <symbol> { </symbol>
-  {classVarDecs}
-  {classSubroutineDecs}
+  <symbol> { </symbol>"""
+  + classVarDecs
+  + classSubroutineDecs
+  + """
   <symbol> } </symbol>
-  """
-  
+</class>
+"""
+let classTokens = [
+  Keyword "class";
+  Identifier "Main";
+  Symbol '{';
+  Symbol '}';
+]
 let testTokens = [
   Keyword "var";
   Keyword "int";
@@ -91,8 +128,33 @@ let testTokens = [
 let testTokens2 = [
   Symbol '}';
   Identifier "doggo";
-  Keyword "null";]
+  Keyword "null";
+]
 
+let classVarDecsTest = [
+  Keyword "static";
+  Keyword "boolean";
+  Identifier "test";
+  Symbol ','; 
+  Identifier "test2";
+  Symbol ';';
+  Keyword "static";
+  Keyword "int";
+  Identifier "i";
+  Symbol ';'
+]
+
+printfn "%A" (getConsecutivePatterns (Keyword "static") (Symbol ';') classVarDecsTest)
+printfn "%A" (CompileClassVarDecs testTokens)
+printfn "%A" (CompileClassVarDecs classVarDecsTest)
+printfn "%A" ((isOneOfTokens [(Keyword "nut"); (Identifier "salad"); (Keyword "int"); (Symbol '{')]) [(Identifier "Point"); (Identifier "string")]) 
+printfn "%A" ((isOneOfTokens [(Keyword "nut"); (Identifier "Point"); (Keyword "int"); (Symbol '{')]) [(Identifier "Point"); (Identifier "string")]) 
+printfn "%A" (isTypeProgramStructure [(Keyword "nut")]) 
+printfn "%A" (isTypeProgramStructure [(Keyword "int")]) 
+printfn "%A" (isTypeProgramStructure [(Keyword "char")]) 
+printfn "%A" (isTypeProgramStructure [(Keyword "boolean")]) 
+printfn "%A" (isTypeProgramStructure [(Identifier "Point")]) 
+printfn "%A" (CompileClass classTokens)
 printfn "%A" (eatIf (isSameToken (Symbol '}')) testTokens2)
 printfn "%A" (eatIf (isSameToken (Keyword "var")) testTokens)
 //printfn "%A" (getNextTokenIf (isSameType (Identifier "dog")) testTokens)
