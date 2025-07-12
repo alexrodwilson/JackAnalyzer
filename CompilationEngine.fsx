@@ -77,7 +77,6 @@ let isTypeOrVoid xs =
 
 let CompileClassVarDecs tokens = 
   let classVarDecPatterns, remainingTokens = getConsecutivePatterns (fun x -> x = (Keyword "static") || x = (Keyword "field")) (fun x -> x = (Symbol ';')) tokens
-
   let doOneDec listOfTokens =
     let staticOrField, listOfTokens = getNextTokenIf (isOneOfTokens [(Keyword "static"); (Keyword "field")]) listOfTokens 
     let typ, listOfTokens = getNextTokenIf isTypeProgramStructure listOfTokens
@@ -101,11 +100,25 @@ let CompileClassVarDecs tokens =
 
 
 let CompileParameterList tokens =
-  "", tokens
+  let rec aux tokens count xml = 
+    match tokens with
+    | [] -> xml, count
+    | head::tail when head = Symbol ',' -> aux tail count (xml + (tokenToXml head) + "\n")
+                                           
+    | head::tail -> let typ, tokens = getNextTokenIf isTypeProgramStructure tokens
+                    let varName, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
+                    let newXml = $$"""{{tokenToXml typ}}
+{{tokenToXml varName}}
+"""
+                    aux tokens (count + 1) (xml + newXml)
+  aux tokens 0 ""
+      
+        
+        
 
 let CompileSubroutineBody (tokens: Token list) = 
   $$"""<symbol> { </symbol>
-<symbol> } </symbol>
+  <symbol> } </symbol>
 """
 
 
@@ -242,6 +255,27 @@ let curlyBracketsTest2 = [
   Keyword "pooch"
 ]
 
+let paramTest = [
+  Identifier "Point";
+  Identifier "p";
+  Symbol ',';
+  Keyword "int";
+  Identifier "i";
+  Symbol ',';
+  Keyword "boolean";
+  Identifier "b";
+]
+
+let paramTest2 = [
+  Keyword "int";
+  Identifier "i"
+]
+
+let paramTest1 = []
+
+printfn "%A" (CompileParameterList paramTest2)
+printfn "%A" (CompileParameterList paramTest1)
+printfn "%A" (CompileParameterList paramTest)
 //printfn "%A" (doOneSubroutineDec oneSubroutineTest)
 //printfn "%A" (advanceUntilMatchingCurlyBracket curlyBracketsTest2)
 //printfn "%A" (advanceUntilMatchingCurlyBracket curlyBracketsTest)
