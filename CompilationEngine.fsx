@@ -75,6 +75,23 @@ let isTypeProgramStructure xs =
 let isTypeOrVoid xs =
   (isTypeProgramStructure xs) || xs.Head = (Keyword "void")
 
+let CompileVarDecs tokens =
+  let patterns, remainingTokens = getConsecutivePatterns (fun x -> x = (Keyword "var")) (fun x -> x = (Symbol ';')) tokens
+  let compileOne tokens = 
+    let tokens = eatIf (isSameToken (Keyword "var")) tokens
+    let typ, tokens = getNextTokenIf isTypeProgramStructure tokens
+    let varName, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
+    let otherVarsXml =  tokens |> List.map tokenToXml
+                               |> List.reduce (fun x y -> x + "\n" + y)
+    $$"""{{tokenToXml typ}} 
+{{tokenToXml varName}}
+{{otherVarsXml}}
+"""
+  patterns |> List.map  compileOne
+           |> (List.reduce (+)), remainingTokens
+
+
+
 let CompileClassVarDecs tokens = 
   let classVarDecPatterns, remainingTokens = getConsecutivePatterns (fun x -> x = (Keyword "static") || x = (Keyword "field")) (fun x -> x = (Symbol ';')) tokens
   let doOneDec listOfTokens =
@@ -82,12 +99,12 @@ let CompileClassVarDecs tokens =
     let typ, listOfTokens = getNextTokenIf isTypeProgramStructure listOfTokens
     let varName, listOfTokens = getNextTokenIf  (isSameType (Identifier "_")) listOfTokens
     let otherVarsXml = listOfTokens |> List.map tokenToXml
-                                    |> List.reduce (fun x y -> x + "\n  " + y)
+                                    |> List.reduce (fun x y -> x + "\n" + y)
     $$"""<classVarDec>
-  {{tokenToXml staticOrField}}
-  {{tokenToXml typ}}
-  {{tokenToXml varName}}
-  {{otherVarsXml}}
+{{tokenToXml staticOrField}}
+{{tokenToXml typ}}
+{{tokenToXml varName}}
+{{otherVarsXml}}
 </classVarDec>
 """
   match classVarDecPatterns with
@@ -102,7 +119,8 @@ let CompileClassVarDecs tokens =
 let CompileParameterList tokens =
   let rec aux tokens count xml = 
     match tokens with
-    | [] -> xml, count
+    | [] -> let xml = "<parameterList>" + "\n" + xml + "</parameterList>" + "\n"
+            xml, count
     | head::tail when head = Symbol ',' -> aux tail count (xml + (tokenToXml head) + "\n")
                                            
     | head::tail -> let typ, tokens = getNextTokenIf isTypeProgramStructure tokens
@@ -112,16 +130,11 @@ let CompileParameterList tokens =
 """
                     aux tokens (count + 1) (xml + newXml)
   aux tokens 0 ""
-      
         
-        
-
 let CompileSubroutineBody (tokens: Token list) = 
   $$"""<symbol> { </symbol>
-  <symbol> } </symbol>
+<symbol> } </symbol>
 """
-
-
 
 let CompileSubroutineDecs tokens =
   let doOneSubroutineDec tokens =
@@ -135,16 +148,16 @@ let CompileSubroutineDecs tokens =
     let subroutineBodyTokens, ts = advanceUntilMatchingCurlyBracket ts
     let subroutineBodyXml = CompileSubroutineBody subroutineBodyTokens
     $$"""<subroutineDec>
-  {{tokenToXml constructorFunctionMethod}}
-  {{tokenToXml voidOrType}}
-  {{tokenToXml subroutineName}}
-  <symbol> ( </symbol>
-  """ + parameterXml
+{{tokenToXml constructorFunctionMethod}}
+{{tokenToXml voidOrType}}
+{{tokenToXml subroutineName}}
+<symbol> ( </symbol>
+""" + parameterXml
       + """<symbol> ) </symbol>
-  """
+"""
       + subroutineBodyXml 
       + """</subroutineDec>
-  """
+"""
       , ts
   let rec aux remainingTokens xml =
     match remainingTokens with
@@ -165,13 +178,13 @@ let CompileClass tokens =
  let classSubroutineDecs = CompileSubroutineDecs tokens
  let tokens = eatIf (isSameToken (Symbol '}')) tokens
  $$"""<class>
-  <keyword> class </keyword>
-  <keyword> {{deconstruct className}} </keyword>
-  <symbol> { </symbol>"""
+<keyword> class </keyword>
+<keyword> {{deconstruct className}} </keyword>
+<symbol> { </symbol>
+"""
   + classVarDecs
   + classSubroutineDecs
-  + """
-  <symbol> } </symbol>
+  + """<symbol> } </symbol>
 </class>
 """
 
@@ -217,7 +230,15 @@ let subroutineDecsTest = [
   Keyword "function";
   Keyword "void";
   Identifier "more";
-  Symbol '(';
+  Symbol '(';  
+  Identifier "Point";
+  Identifier "p";
+  Symbol ',';
+  Keyword "int";
+  Identifier "i";
+  Symbol ',';
+  Keyword "boolean";
+  Identifier "b";
   Symbol ')';
   Symbol '{';
   Symbol '}';
@@ -273,9 +294,13 @@ let paramTest2 = [
 
 let paramTest1 = []
 
-printfn "%A" (CompileParameterList paramTest2)
-printfn "%A" (CompileParameterList paramTest1)
-printfn "%A" (CompileParameterList paramTest)
+let varDecsTest = [Keyword "var"; Keyword "int"; Identifier "i"; Symbol ','; Identifier "j"; Symbol ';'; 
+  Keyword "var"; Identifier "String"; Identifier "s"; Symbol ';']
+
+printfn "%A" (CompileVarDecs varDecsTest)
+//printfn "%A" (CompileParameterList paramTest2)
+//printfn "%A" (CompileParameterList paramTest1)
+//printfn "%A" (CompileParameterList paramTest)
 //printfn "%A" (doOneSubroutineDec oneSubroutineTest)
 //printfn "%A" (advanceUntilMatchingCurlyBracket curlyBracketsTest2)
 //printfn "%A" (advanceUntilMatchingCurlyBracket curlyBracketsTest)
