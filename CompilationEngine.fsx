@@ -75,6 +75,50 @@ let isTypeProgramStructure xs =
 let isTypeOrVoid xs =
   (isTypeProgramStructure xs) || xs.Head = (Keyword "void")
 
+let check test token = 
+  if test token then token
+  else failwith ("Unexpected token found in stream" + (string token))
+
+let maybeGetNextTokenIf test tokens =
+  match tokens with
+  | [] -> failwith "Token stream empty unexpectedly"
+  | head::tail when test tokens -> Some head, tail
+  | _ -> None, tokens
+
+let CompileExpression tokens = 
+  ""
+
+let CompileLetStatement tokens = 
+  let tokens = eatIf (isSameToken (Keyword "let")) tokens
+  let varName, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
+  let maybeLeftSquareBracket, tokens = maybeGetNextTokenIf (isSameToken (Symbol '[')) tokens
+  let arrayIndexExpressionXml , tokens =
+    match maybeLeftSquareBracket with
+    | Some t -> let expressionTokens, tokens = advanceUntil (fun x -> x = (Symbol ']')) tokens false
+                let expressionXml = CompileExpression expressionTokens
+                let tokens = eatIf (isSameToken (Symbol ']')) tokens
+                ($$"""<symbol> [ </symbol>
+<expression>
+{{expressionXml}}
+</expression>
+<symbol> ] </symbol>
+
+""", tokens)
+    | None -> ("", tokens)
+
+  let tokens = eatIf (isSameToken (Symbol '=')) tokens
+  let rhsExpressionTokens, remainingTokens = advanceUntil (fun x -> x = (Symbol ';')) tokens false
+  let rhsExpressionXml = CompileExpression rhsExpressionTokens
+  let remainingTokens = eatIf (isSameToken (Symbol ';')) tokens
+  $$"""<keyword> let </keyword>
+{{tokenToXml varName}}
+{{arrayIndexExpressionXml}}
+<symbol> = </symbol>
+{{rhsExpressionXml}}
+""" 
+  
+  
+
 let CompileVarDecs tokens =
   let patterns, remainingTokens = getConsecutivePatterns (fun x -> x = (Keyword "var")) (fun x -> x = (Symbol ';')) tokens
   let compileOne tokens = 
@@ -297,7 +341,10 @@ let paramTest1 = []
 let varDecsTest = [Keyword "var"; Keyword "int"; Identifier "i"; Symbol ','; Identifier "j"; Symbol ';'; 
   Keyword "var"; Identifier "String"; Identifier "s"; Symbol ';']
 
-printfn "%A" (CompileVarDecs varDecsTest)
+let letTest = [Keyword "let"; Identifier "x"; Symbol '='; Identifier "x"; Symbol ';']
+
+printfn "%A" (CompileLetStatement letTest)  
+//printfn "%A" (CompileVarDecs varDecsTest)
 //printfn "%A" (CompileParameterList paramTest2)
 //printfn "%A" (CompileParameterList paramTest1)
 //printfn "%A" (CompileParameterList paramTest)
