@@ -11,6 +11,7 @@ let deconstruct token =
 let advanceUntil test tokens returnLastToken = 
   let rec aux toReturn remainingTokens =
     match remainingTokens with
+    | [] -> toReturn, []
     | head::tail when test head -> if returnLastToken then
                                     List.rev (head::toReturn), tail
                                    else 
@@ -85,8 +86,64 @@ let maybeGetNextTokenIf test tokens =
   | head::tail when test tokens -> Some head, tail
   | _ -> None, tokens
 
-let CompileExpression tokens = 
-  ""
+
+
+let isOp token = 
+  let ops = ['+'; '-'; '/'; '&'; '|'; '<'; '>';'=']
+  match token with
+  | Symbol s when (List.contains s ops) -> true
+  | _ -> false
+
+let getTokensBeforeOp tokens = 
+  advanceUntil (fun x -> isOp x) tokens false
+
+let wrapXml wrappingS sToWrap =
+  $$"""<{{wrappingS}}> 
+{{sToWrap}} 
+</{{wrappingS}}>"""
+
+let CompileSubroutineCall tokens = 
+  failwith "Not implemented yet"
+
+let rec CompileTerm (tokens: Token list) =
+  let resXml =
+    match tokens.Head with
+    | IntConstant i -> tokenToXml tokens.Head
+    | StringConstant s -> tokenToXml tokens.Head
+    | Keyword k -> tokenToXml tokens.Head
+    | Symbol s when (s = '-' || s = '~') -> (tokenToXml tokens.Head) + (CompileTerm tokens.Tail)
+    | Identifier i when tokens.Tail = [] -> tokenToXml tokens.Head
+    | Identifier i when tokens.Tail.Head = (Symbol '[') -> 
+        let varName = tokenToXml tokens.Head
+        let leftBracket = tokenToXml tokens.Tail.Head
+        let expressionTokens, rightBracketToken = (advanceUntil (fun x -> x = (Symbol ']')) tokens false)
+        let expressionXml = CompileExpression expressionTokens
+        let rightBracket = tokenToXml rightBracketToken.Head
+        $$"""{{varName}}
+{{leftBracket}}
+{{expressionXml}}
+{{rightBracket}}""" 
+    | Identifier i when tokens.Tail.Head = (Symbol '(') -> CompileSubroutineCall tokens
+  wrapXml "term" resXml
+
+
+and CompileExpression tokens = 
+  let rec aux tokens xml = 
+    match tokens with
+    | [] -> xml 
+    | head::tail when (isOp head) -> aux tail ((tokenToXml head) + "\n" + xml)
+    | head::tail  -> 
+        let tokensBeforeOp, remainingTokens = getTokensBeforeOp tokens
+        let nextTermXml = CompileTerm tokensBeforeOp
+        aux remainingTokens (nextTermXml + "\n" + xml)
+  let res = 
+    match tokens with 
+    | [] -> ""
+    | head::tail when head = (Symbol '-') || head = (Symbol '~') -> CompileTerm tokens
+    | _ -> aux tokens ""
+  wrapXml "expression" res
+
+
 
 let CompileLetStatement tokens = 
   let tokens = eatIf (isSameToken (Keyword "let")) tokens
@@ -342,8 +399,28 @@ let varDecsTest = [Keyword "var"; Keyword "int"; Identifier "i"; Symbol ','; Ide
   Keyword "var"; Identifier "String"; Identifier "s"; Symbol ';']
 
 let letTest = [Keyword "let"; Identifier "x"; Symbol '='; Identifier "x"; Symbol ';']
+let expressionTest1 = [IntConstant 2]
+let expressionTest2 = [IntConstant 2; Symbol '+'; IntConstant 20]
+//let expressionTest3 = [Identifier "things"; Symbol '['; IntConstant 4; Symbol ']']
+let termTest1  = [Symbol '-'; IntConstant 10]
+let termTest2 = [Identifier "a"; Symbol '['; IntConstant 3; Symbol '*'; IntConstant 10; Symbol ']']
+let termTest3 = [Symbol '('; IntConstant 1; Symbol ')']
+let termTest4 = [Keyword "null"]
+let termTest5 = [IntConstant 99]
+let termTest6 = [Identifier "boris"]
 
-printfn "%A" (CompileLetStatement letTest)  
+//printfn "%A" (CompileTerm termTest1) 
+printfn "%A" (CompileTerm termTest2)
+printfn ""
+printfn "%A" (CompileExpression expressionTest2)
+printfn ""
+printfn "%A" (wrapXml "expression" (wrapXml "term" "dog"))
+//printfn "%A" (CompileTerm termTest3) 
+//printfn "%A" (CompileTerm termTest4) 
+//printfn "%A" (CompileTerm termTest5) 
+//printfn "%A" (CompileTerm termTest6) 
+//printfn "%A" (CompileExpression expressionTest2) 
+//printfn "%A" (CompileLetStatement letTest)  
 //printfn "%A" (CompileVarDecs varDecsTest)
 //printfn "%A" (CompileParameterList paramTest2)
 //printfn "%A" (CompileParameterList paramTest1)
@@ -351,23 +428,23 @@ printfn "%A" (CompileLetStatement letTest)
 //printfn "%A" (doOneSubroutineDec oneSubroutineTest)
 //printfn "%A" (advanceUntilMatchingCurlyBracket curlyBracketsTest2)
 //printfn "%A" (advanceUntilMatchingCurlyBracket curlyBracketsTest)
-printfn "%A" (CompileSubroutineDecs subroutineDecsTest)
-printfn "%A" (getConsecutivePatterns (fun x -> x = (Keyword "static")) (fun x -> x = (Symbol ';')) classVarDecsTest)
-printfn "%A" (CompileClassVarDecs testTokens)
-printfn "%A" (CompileClassVarDecs classVarDecsTest)
-printfn "%A" ((isOneOfTokens [(Keyword "nut"); (Identifier "salad"); (Keyword "int"); (Symbol '{')]) [(Identifier "Point"); (Identifier "string")]) 
-printfn "%A" ((isOneOfTokens [(Keyword "nut"); (Identifier "Point"); (Keyword "int"); (Symbol '{')]) [(Identifier "Point"); (Identifier "string")]) 
-printfn "%A" (isTypeProgramStructure [(Keyword "nut")]) 
-printfn "%A" (isTypeProgramStructure [(Keyword "int")]) 
-printfn "%A" (isTypeProgramStructure [(Keyword "char")]) 
-printfn "%A" (isTypeProgramStructure [(Keyword "boolean")]) 
-printfn "%A" (isTypeProgramStructure [(Identifier "Point")]) 
+//printfn "%A" (CompileSubroutineDecs subroutineDecsTest)
+//printfn "%A" (getConsecutivePatterns (fun x -> x = (Keyword "static")) (fun x -> x = (Symbol ';')) classVarDecsTest)
+//printfn "%A" (CompileClassVarDecs testTokens)
+//printfn "%A" (CompileClassVarDecs classVarDecsTest)
+//printfn "%A" ((isOneOfTokens [(Keyword "nut"); (Identifier "salad"); (Keyword "int"); (Symbol '{')]) [(Identifier "Point"); (Identifier "string")]) 
+//printfn "%A" ((isOneOfTokens [(Keyword "nut"); (Identifier "Point"); (Keyword "int"); (Symbol '{')]) [(Identifier "Point"); (Identifier "string")]) 
+//printfn "%A" (isTypeProgramStructure [(Keyword "nut")]) 
+//printfn "%A" (isTypeProgramStructure [(Keyword "int")]) 
+//printfn "%A" (isTypeProgramStructure [(Keyword "char")]) 
+//printfn "%A" (isTypeProgramStructure [(Keyword "boolean")]) 
+//printfn "%A" (isTypeProgramStructure [(Identifier "Point")]) 
 //printfn "%A" (CompileClass classTokens)
-printfn "%A" (eatIf (isSameToken (Symbol '}')) testTokens2)
-printfn "%A" (eatIf (isSameToken (Keyword "var")) testTokens)
+//printfn "%A" (eatIf (isSameToken (Symbol '}')) testTokens2)
+//printfn "%A" (eatIf (isSameToken (Keyword "var")) testTokens)
 //printfn "%A" (getNextTokenIf (isSameType (Identifier "dog")) testTokens)
 //printfn "%A" (getNextTokenIf (isSameToken (Identifier "var")) testTokens)
-printfn "%A" (getNextTokenIf (isSameToken (Keyword "var")) testTokens)
-printfn "%A" (getNextTokenIf (isSameType (Keyword "_")) testTokens)
-printfn "%A" (advanceUntil (fun x -> x = (Symbol ';')) testTokens true)
-printfn "%A" (getConsecutivePatterns (fun x -> x = (Keyword "var")) (fun x -> x = (Symbol ';')) testTokens)
+//printfn "%A" (getNextTokenIf (isSameToken (Keyword "var")) testTokens)
+//printfn "%A" (getNextTokenIf (isSameType (Keyword "_")) testTokens)
+//printfn "%A" (advanceUntil (fun x -> x = (Symbol ';')) testTokens true)
+//printfn "%A" (getConsecutivePatterns (fun x -> x = (Keyword "var")) (fun x -> x = (Symbol ';')) testTokens)
