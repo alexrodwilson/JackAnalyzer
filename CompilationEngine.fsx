@@ -89,7 +89,7 @@ let maybeGetNextTokenIf test tokens =
 
 
 let isOp token = 
-  let ops = ['+'; '-'; '/'; '&'; '|'; '<'; '>';'=']
+  let ops = ['+'; '-'; '*'; '/'; '&'; '|'; '<'; '>';'=']
   match token with
   | Symbol s when (List.contains s ops) -> true
   | _ -> false
@@ -105,44 +105,51 @@ let wrapXml wrappingS sToWrap =
 let CompileSubroutineCall tokens = 
   failwith "Not implemented yet"
 
-let rec CompileTerm (tokens: Token list) =
-  let resXml =
-    match tokens.Head with
-    | IntConstant i -> tokenToXml tokens.Head
-    | StringConstant s -> tokenToXml tokens.Head
-    | Keyword k -> tokenToXml tokens.Head
-    | Symbol s when (s = '-' || s = '~') -> (tokenToXml tokens.Head) + (CompileTerm tokens.Tail)
-    | Identifier i when tokens.Tail = [] -> tokenToXml tokens.Head
-    | Identifier i when tokens.Tail.Head = (Symbol '[') -> 
-        let varName = tokenToXml tokens.Head
-        let leftBracket = tokenToXml tokens.Tail.Head
-        let expressionTokens, rightBracketToken = (advanceUntil (fun x -> x = (Symbol ']')) tokens false)
-        let expressionXml = CompileExpression expressionTokens
-        let rightBracket = tokenToXml rightBracketToken.Head
-        $$"""{{varName}}
-{{leftBracket}}
+let rec CompileTerm (tokens: Token list) = 
+  let toXmlAndWrap = tokenToXml >> (wrapXml "term")
+  match tokens.Head with
+  | IntConstant i -> toXmlAndWrap tokens.Head, tokens.Tail
+  | StringConstant s ->  toXmlAndWrap tokens.Head, tokens.Tail
+  | Keyword k -> toXmlAndWrap tokens.Head, tokens.Tail
+  | Symbol s when s = '(' -> 
+    let leftBracketXml = tokenToXml tokens.Head
+    let expressionTokens, remainingTokens = advanceUntil (fun x -> x = (Symbol ')')) tokens.Tail false
+    let expressionXml = CompileExpression expressionTokens
+    let rightBracketXml = tokenToXml remainingTokens.Head
+    let termXml = $$"""{{leftBracketXml}}
 {{expressionXml}}
-{{rightBracket}}""" 
-    | Identifier i when tokens.Tail.Head = (Symbol '(') -> CompileSubroutineCall tokens
-  wrapXml "term" resXml
+{{rightBracketXml}}"""
+    wrapXml "term" termXml, remainingTokens.Tail       
+  | Symbol s when (s = '-' || s = '~') -> 
+    let unaryOpXml = tokenToXml tokens.Head
+    let termXml, remainingTokens = CompileTerm tokens.Tail
+    (wrapXml "term" (unaryOpXml + "\n" + termXml), remainingTokens)
+  | Identifier i when tokens.Tail = [] -> toXmlAndWrap tokens.Head, tokens.Tail
+  | Identifier i when tokens.Tail.Head = (Symbol '[') ->
+    let varNameXml = tokenToXml tokens.Head
+    let leftBracketXml = tokenToXml tokens.Tail.Head
+    let expressionTokens, remainingTokens = advanceUntil (fun x -> x = (Symbol ']')) tokens.Tail.Tail false
+    let expressionXml = CompileExpression expressionTokens
+    let rightBracketXml = tokenToXml remainingTokens.Head
+    wrapXml "term" $$"""{{varNameXml}}
+{{leftBracketXml}}
+{{expressionXml}}
+{{rightBracketXml}}""", remainingTokens.Tail
+  | Identifier i when tokens.Tail.Head = (Symbol '(') ->
+    toXmlAndWrap (CompileSubroutineCall tokens), []
 
-
-and CompileExpression tokens = 
-  let rec aux tokens xml = 
-    match tokens with
-    | [] -> xml 
-    | head::tail when (isOp head) -> aux tail ((tokenToXml head) + "\n" + xml)
-    | head::tail  -> 
-        let tokensBeforeOp, remainingTokens = getTokensBeforeOp tokens
-        let nextTermXml = CompileTerm tokensBeforeOp
-        aux remainingTokens (nextTermXml + "\n" + xml)
-  let res = 
-    match tokens with 
-    | [] -> ""
-    | head::tail when head = (Symbol '-') || head = (Symbol '~') -> CompileTerm tokens
-    | _ -> aux tokens ""
-  wrapXml "expression" res
-
+and CompileExpression tokens =
+  let rec aux expectingTerm remainingTokens xml =
+    match remainingTokens with 
+    | [] -> wrapXml "expression" xml
+    | head::tail when (not expectingTerm) -> 
+      match head with
+      | _ when (isOp head) -> aux true tail (xml + "\n" + (tokenToXml head) + "\n")
+      | _ -> failwith ("Unexpected token when expected op in expression: " + (string head))
+    | head::tail -> 
+      let termXml, remainingTokens = CompileTerm remainingTokens
+      aux false remainingTokens (xml + termXml)
+  aux true tokens ""
 
 
 let CompileLetStatement tokens = 
@@ -403,18 +410,23 @@ let expressionTest1 = [IntConstant 2]
 let expressionTest2 = [IntConstant 2; Symbol '+'; IntConstant 20]
 //let expressionTest3 = [Identifier "things"; Symbol '['; IntConstant 4; Symbol ']']
 let termTest1  = [Symbol '-'; IntConstant 10]
-let termTest2 = [Identifier "a"; Symbol '['; IntConstant 3; Symbol '*'; IntConstant 10; Symbol ']']
-let termTest3 = [Symbol '('; IntConstant 1; Symbol ')']
+let termTest2 = [Identifier "a"; Symbol '['; IntConstant 3; Symbol '*'; IntConstant 10; Symbol ']'; Symbol '+'; StringConstant "dog"]
+let termTest3 = [Symbol '('; IntConstant 1; Symbol ')'; Symbol '*'; IntConstant 3]
 let termTest4 = [Keyword "null"]
 let termTest5 = [IntConstant 99]
 let termTest6 = [Identifier "boris"]
+let beforeOpTest = [Symbol '('; IntConstant 3; Symbol '+'; IntConstant 1; Symbol ')'; Symbol '-'; IntConstant 2]
 
 //printfn "%A" (CompileTerm termTest1) 
-printfn "%A" (CompileTerm termTest2)
+//printfn "%A" (CompileTerm termTest2)
+//printfn "%A" (getTokensBeforeOp beforeOpTest)
 printfn ""
 printfn "%A" (CompileExpression expressionTest2)
 printfn ""
-printfn "%A" (wrapXml "expression" (wrapXml "term" "dog"))
+printfn "%A" (CompileExpression termTest3)
+printfn ""
+printfn "%A" (CompileExpression termTest2)
+//printfn "%A" (wrapXml "expression" (wrapXml "term" "dog"))
 //printfn "%A" (CompileTerm termTest3) 
 //printfn "%A" (CompileTerm termTest4) 
 //printfn "%A" (CompileTerm termTest5) 
