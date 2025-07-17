@@ -11,7 +11,7 @@ let deconstruct token =
 let advanceUntil test tokens returnLastToken = 
   let rec aux toReturn remainingTokens =
     match remainingTokens with
-    | [] -> toReturn, []
+    | [] -> List.rev toReturn, []
     | head::tail when test head -> if returnLastToken then
                                     List.rev (head::toReturn), tail
                                    else 
@@ -102,8 +102,33 @@ let wrapXml wrappingS sToWrap =
 {{sToWrap}} 
 </{{wrappingS}}>"""
 
-let CompileSubroutineCall tokens = 
-  failwith "Not implemented yet"
+
+(*let CompileSubroutineCall tokens = 
+  match tokens with
+  | head::tail when tail.Head = (Symbol '(') -> 
+    let subroutineName, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
+    let tokens = eatIf (isSameToken (Symbol '(')) tokens
+    let expressionListTokens, tokens = advanceUntil (fun x -> x = (Symbol ')')) tokens false
+    let tokens = eatIf (isSameToken (Symbol ')')) tokens
+    $$"""{{tokenToXml subroutineName}}
+{{tokenToXml (Symbol '(')}}
+{{CompileExpressionList expressionListTokens}}
+{{tokenToXml (Symbol ')')}}""", tokens
+  | head::tail when tail.Head = (Symbol '.') ->
+    let classOrVarName, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
+    let tokens = eatIf (isSameToken (Symbol '.')) tokens
+    let subroutineName, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
+    let tokens = eatIf (isSameToken (Symbol '(')) tokens
+    let expressionListTokens, tokens = advanceUntil (fun x -> x = (Symbol ')')) tokens false
+    let tokens = eatIf (isSameToken (Symbol ')')) tokens
+    $$"""{{tokenToXml classOrVarName}}
+{{tokenToXml (Symbol '.')}}
+{{tokenToXml subroutineName}}
+{{tokenToXml (Symbol '(')}}
+{{CompileExpressionList expressionListTokens}}
+{{tokenToXml (Symbol ')')}}""", tokens
+  | _ -> failwith "Wrong token found in CompileSubroutineCall"*)
+
 
 let rec CompileTerm (tokens: Token list) = 
   let toXmlAndWrap = tokenToXml >> (wrapXml "term")
@@ -136,7 +161,30 @@ let rec CompileTerm (tokens: Token list) =
 {{expressionXml}}
 {{rightBracketXml}}""", remainingTokens.Tail
   | Identifier i when tokens.Tail.Head = (Symbol '(') ->
-    toXmlAndWrap (CompileSubroutineCall tokens), []
+    let subroutineName, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
+    let tokens = eatIf (isSameToken (Symbol '(')) tokens
+    let expressionListTokens, tokens = advanceUntil (fun x -> x = (Symbol ')')) tokens false
+    let expressionListXml, count = CompileExpressionList expressionListTokens
+    let tokens = eatIf (isSameToken (Symbol ')')) tokens
+    wrapXml "term" $$"""{{tokenToXml subroutineName}}
+{{tokenToXml (Symbol '(')}}
+{{expressionListXml}}
+{{tokenToXml (Symbol ')')}}""", tokens
+  | Identifier i when tokens.Tail.Head = (Symbol '.') ->
+    let classOrVarName, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
+    let tokens = eatIf (isSameToken (Symbol '.')) tokens
+    let subroutineName, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
+    let tokens = eatIf (isSameToken (Symbol '(')) tokens
+    let expressionListTokens, tokens = advanceUntil (fun x -> x = (Symbol ')')) tokens false
+    let expressionListXml, count = CompileExpressionList expressionListTokens
+    let tokens = eatIf (isSameToken (Symbol ')')) tokens
+    wrapXml "term" $$"""{{tokenToXml classOrVarName}}
+{{tokenToXml (Symbol '.')}}
+{{tokenToXml subroutineName}}
+{{tokenToXml (Symbol '(')}}
+{{expressionListXml}}
+{{tokenToXml (Symbol ')')}}""", tokens
+  | _ -> failwith ("Unexpected token found in CompileTerm: " + (string tokens.Head))
 
 and CompileExpression tokens =
   let rec aux expectingTerm remainingTokens xml =
@@ -151,6 +199,19 @@ and CompileExpression tokens =
       aux false remainingTokens (xml + termXml)
   aux true tokens ""
 
+and CompileExpressionList tokens = 
+  let rec aux remainingTokens xml count expectingExpression =
+    match remainingTokens with
+    | [] -> $$"""<expressionList>
+{{xml}}</expressionList>""", count
+    | head::tail when expectingExpression ->
+      let currentExpressionTokens, remainingTokens = advanceUntil (fun x -> x = (Symbol ',')) remainingTokens false
+      let currentExpressionXml = (CompileExpression currentExpressionTokens) + "\n"
+      aux remainingTokens (xml + currentExpressionXml) (count + 1) false
+    | head::tail when not expectingExpression ->
+      let comma, remainingTokens = getNextTokenIf (isSameToken (Symbol ',')) remainingTokens
+      aux remainingTokens (xml + (tokenToXml comma) + "\n") count true
+  aux tokens "" 0 true
 
 let CompileLetStatement tokens = 
   let tokens = eatIf (isSameToken (Keyword "let")) tokens
@@ -416,16 +477,23 @@ let termTest4 = [Keyword "null"]
 let termTest5 = [IntConstant 99]
 let termTest6 = [Identifier "boris"]
 let beforeOpTest = [Symbol '('; IntConstant 3; Symbol '+'; IntConstant 1; Symbol ')'; Symbol '-'; IntConstant 2]
-
+let subroutineCallTest = [Identifier "doSomething"; Symbol '('; IntConstant 2; Symbol '+'; IntConstant 1; Symbol ','; StringConstant "dog"; Symbol ','; Identifier "i"; Symbol ')'] 
+let expressionListTest = [ IntConstant 2; Symbol '+'; IntConstant 1; Symbol ','; StringConstant "dog"; Symbol ','; Identifier "i"]
 //printfn "%A" (CompileTerm termTest1) 
-//printfn "%A" (CompileTerm termTest2)
+//printfn "%A" (CompileTerm termTest2)        
 //printfn "%A" (getTokensBeforeOp beforeOpTest)
+
+printfn "%A" (CompileExpression subroutineCallTest)
 printfn ""
-printfn "%A" (CompileExpression expressionTest2)
-printfn ""
-printfn "%A" (CompileExpression termTest3)
-printfn ""
-printfn "%A" (CompileExpression termTest2)
+//printfn "%A" (CompileExpression [IntConstant 2; Symbol '+'; IntConstant 1])
+//printfn ""
+//printfn "%A" (CompileExpressionList [IntConstant 2; Symbol '+'; IntConstant 1])
+//printfn ""
+//printfn "%A" (CompileExpression expressionTest2)
+//printfn ""
+//printfn "%A" (CompileExpression termTest3)
+//printfn ""
+//printfn "%A" (CompileExpression termTest2)
 //printfn "%A" (wrapXml "expression" (wrapXml "term" "dog"))
 //printfn "%A" (CompileTerm termTest3) 
 //printfn "%A" (CompileTerm termTest4) 
