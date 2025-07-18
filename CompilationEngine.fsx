@@ -200,7 +200,6 @@ let CompileLetStatement tokens =
 {{expressionXml}}
 <symbol> ] </symbol>"""), tokens
     | None -> ("", tokens)
-
   let tokens = eatIf (isSameToken (Symbol '=')) tokens
   let rhsExpressionTokens, remainingTokens = advanceUntil (fun x -> x = (Symbol ';')) tokens false
   let rhsExpressionXml = CompileExpression rhsExpressionTokens
@@ -219,6 +218,18 @@ let CompileDoStatement tokens =
 {{subroutineCallXml}}
 <symbol> ; </symbol>""", tokens
 
+let CompileReturnStatement tokens = 
+  let tokens = eatIf (isSameToken (Keyword "return")) tokens
+  let expressionTokens, tokens = advanceUntil (fun x -> x = (Symbol ';')) tokens false
+  let expressionXml =
+    match expressionTokens with 
+    | [] -> ""
+    | _ -> "\n" + (CompileExpression expressionTokens) 
+  let tokens = eatIf (isSameToken (Symbol ';')) tokens
+  (wrapXml "returnStatement" $$"""<keyword> return </keyword>{{expressionXml}}
+<symbol> ; </symbol>"""), tokens
+
+
 
 let CompileVarDecs tokens =
   let patterns, remainingTokens = getConsecutivePatterns (fun x -> x = (Keyword "var")) (fun x -> x = (Symbol ';')) tokens
@@ -230,8 +241,7 @@ let CompileVarDecs tokens =
                                |> List.reduce (fun x y -> x + "\n" + y)
     $$"""{{tokenToXml typ}} 
 {{tokenToXml varName}}
-{{otherVarsXml}}
-"""
+{{otherVarsXml}} """
   patterns |> List.map  compileOne
            |> (List.reduce (+)), remainingTokens
 
@@ -453,7 +463,8 @@ let termTest4 = [Keyword "null"]
 let termTest5 = [IntConstant 99]
 let termTest6 = [Identifier "boris"]
 let beforeOpTest = [Symbol '('; IntConstant 3; Symbol '+'; IntConstant 1; Symbol ')'; Symbol '-'; IntConstant 2]
-let subroutineCallTest = [Identifier "doSomething"; Symbol '('; IntConstant 2; Symbol '+'; IntConstant 1; Symbol ','; StringConstant "dog"; Symbol ','; Identifier "i"; Symbol ')'] 
+let returnTest = [Keyword "return"; Identifier "doSomething"; Symbol '('; IntConstant 2; Symbol '+'; IntConstant 1; 
+  Symbol ','; StringConstant "dog"; Symbol ','; Identifier "i"; Symbol ')'; Symbol ';'] 
 let expressionListTest = [ IntConstant 2; Symbol '+'; IntConstant 1; Symbol ','; StringConstant "dog"; Symbol ','; Identifier "i"]
 let subroutineCallTest2 = [Identifier "point"; Symbol '.'; Identifier "doSomething"; Symbol '('; IntConstant 1; Symbol '+'; IntConstant 2; Symbol '-'; IntConstant 1;
                            Symbol ')']
@@ -463,17 +474,15 @@ Symbol ','; StringConstant "dog"; Symbol ','; Identifier "i"; Symbol ')'; Symbol
 //printfn "%A" (CompileTerm termTest1) 
 //printfn "%A" (CompileTerm termTest2)        
 //printfn "%A" (getTokensBeforeOp beforeOpTest)
-
-
-printfn "%A" (CompileExpression subroutineCallTest)
-printfn ""
-printfn "%A" (CompileExpression subroutineCallTest2)
+printfn "%A" (CompileReturnStatement returnTest)
 printfn ""
 printfn "%A" (CompileLetStatement letTest)
 printfn ""
 printfn "%A" (CompileLetStatement letTest2)
 printfn ""
 printfn "%A" (CompileDoStatement doTest)
+printfn ""
+printfn "%A" (CompileReturnStatement [Keyword "return"; Symbol ';'])
 //printfn "%A" (CompileExpression [IntConstant 2; Symbol '+'; IntConstant 1])
 //printfn ""
 //printfn "%A" (CompileExpressionList [IntConstant 2; Symbol '+'; IntConstant 1])
