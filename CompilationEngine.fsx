@@ -210,6 +210,16 @@ let CompileLetStatement tokens =
 <symbol> = </symbol>
 {{rhsExpressionXml}}""" 
 
+let CompileDo tokens =
+  let tokens = eatIf (isSameToken (Keyword "do")) tokens
+  let subroutineCallTokens, tokens = advanceUntil (fun x -> x = (Symbol ';')) tokens false
+  let subroutineCallXml, notNeeded = CompileTerm subroutineCallTokens
+  let tokens = eatIf (isSameToken (Symbol ';')) tokens
+  xmlWrap "doStatement" $$"""<keyword> do </keyword>
+{{subroutineCallXml}}
+<symbol> ; </symbol>"""
+
+
 let CompileVarDecs tokens =
   let patterns, remainingTokens = getConsecutivePatterns (fun x -> x = (Keyword "var")) (fun x -> x = (Symbol ';')) tokens
   let compileOne tokens = 
