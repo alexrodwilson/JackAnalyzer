@@ -208,16 +208,16 @@ let CompileLetStatement tokens =
   wrapXml "letStatement" $$"""<keyword> let </keyword>
 {{tokenToXml varName}}{{arrayIndexExpressionXml}}
 <symbol> = </symbol>
-{{rhsExpressionXml}}""" 
+{{rhsExpressionXml}}""", remainingTokens
 
-let CompileDo tokens =
+let CompileDoStatement tokens =
   let tokens = eatIf (isSameToken (Keyword "do")) tokens
   let subroutineCallTokens, tokens = advanceUntil (fun x -> x = (Symbol ';')) tokens false
   let subroutineCallXml, notNeeded = CompileTerm subroutineCallTokens
   let tokens = eatIf (isSameToken (Symbol ';')) tokens
-  xmlWrap "doStatement" $$"""<keyword> do </keyword>
+  wrapXml "doStatement" $$"""<keyword> do </keyword>
 {{subroutineCallXml}}
-<symbol> ; </symbol>"""
+<symbol> ; </symbol>""", tokens
 
 
 let CompileVarDecs tokens =
@@ -457,17 +457,23 @@ let subroutineCallTest = [Identifier "doSomething"; Symbol '('; IntConstant 2; S
 let expressionListTest = [ IntConstant 2; Symbol '+'; IntConstant 1; Symbol ','; StringConstant "dog"; Symbol ','; Identifier "i"]
 let subroutineCallTest2 = [Identifier "point"; Symbol '.'; Identifier "doSomething"; Symbol '('; IntConstant 1; Symbol '+'; IntConstant 2; Symbol '-'; IntConstant 1;
                            Symbol ')']
+let doTest = [Keyword "do"; Identifier "doSomething"; Symbol '('; IntConstant 1; Symbol '+'; IntConstant 2;
+Symbol ','; StringConstant "dog"; Symbol ','; Identifier "i"; Symbol ')'; Symbol ';']
+
 //printfn "%A" (CompileTerm termTest1) 
 //printfn "%A" (CompileTerm termTest2)        
 //printfn "%A" (getTokensBeforeOp beforeOpTest)
+
 
 printfn "%A" (CompileExpression subroutineCallTest)
 printfn ""
 printfn "%A" (CompileExpression subroutineCallTest2)
 printfn ""
 printfn "%A" (CompileLetStatement letTest)
-printfn
+printfn ""
 printfn "%A" (CompileLetStatement letTest2)
+printfn ""
+printfn "%A" (CompileDoStatement doTest)
 //printfn "%A" (CompileExpression [IntConstant 2; Symbol '+'; IntConstant 1])
 //printfn ""
 //printfn "%A" (CompileExpressionList [IntConstant 2; Symbol '+'; IntConstant 1])
