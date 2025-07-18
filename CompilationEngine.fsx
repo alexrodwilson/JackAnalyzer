@@ -8,6 +8,11 @@ let deconstruct token =
   | IntConstant i -> (string i)
   | StringConstant s -> s
 
+let indent nOfSpaces (string: string) = 
+  let spaces = String.replicate nOfSpaces " "
+  let s = string.Replace("\n", "\n" + spaces)
+  spaces + s
+
 let advanceUntil test tokens returnLastToken = 
   let rec aux toReturn remainingTokens =
     match remainingTokens with
@@ -493,6 +498,10 @@ let statementsTest = List.concat [letTest; doTest; returnTest]
 //printfn "%A" (CompileTerm termTest1) 
 //printfn "%A" (CompileTerm termTest2)        
 //printfn "%A" (getTokensBeforeOp beforeOpTest)
+printfn "%A" (indent 4 """This is a string that 
+a girl would be proud to bring home
+and show the mother""")
+printfn ""
 printfn "%A" (CompileStatements statementsTest)
 printfn ""
 printfn "%A" (CompileReturnStatement returnTest)
