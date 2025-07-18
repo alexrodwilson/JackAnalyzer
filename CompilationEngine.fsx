@@ -229,7 +229,26 @@ let CompileReturnStatement tokens =
   (wrapXml "returnStatement" $$"""<keyword> return </keyword>{{expressionXml}}
 <symbol> ; </symbol>"""), tokens
 
-
+let CompileStatements tokens = 
+  let rec aux tokens xml =
+    match tokens with
+    | [] -> xml, tokens
+    | head::tail when head = (Keyword "let") -> 
+      let letStatementXml, tokens = CompileLetStatement tokens
+      aux tokens (xml + "\n" + letStatementXml)
+    | head::tail when head = (Keyword "do") ->
+      let doStatementXml, tokens = CompileDoStatement tokens
+      aux tokens (xml + "\n" + doStatementXml)
+    | head::tail when head = (Keyword "return") ->
+      let returnStatementXml, tokens = CompileReturnStatement tokens
+      aux tokens (xml + "\n" + returnStatementXml)
+    | head::tail when head = (Keyword "if") ->
+      failwith "not implemented yet"
+    | head::tail when head = (Keyword "while") ->
+      failwith "not implemented yet"
+  let statementsXml, remainingTokens = aux tokens ""
+  $$"""<statements>{{statementsXml}}
+</statements>""", remainingTokens
 
 let CompileVarDecs tokens =
   let patterns, remainingTokens = getConsecutivePatterns (fun x -> x = (Keyword "var")) (fun x -> x = (Symbol ';')) tokens
@@ -470,10 +489,12 @@ let subroutineCallTest2 = [Identifier "point"; Symbol '.'; Identifier "doSomethi
                            Symbol ')']
 let doTest = [Keyword "do"; Identifier "doSomething"; Symbol '('; IntConstant 1; Symbol '+'; IntConstant 2;
 Symbol ','; StringConstant "dog"; Symbol ','; Identifier "i"; Symbol ')'; Symbol ';']
-
+let statementsTest = List.concat [letTest; doTest; returnTest]
 //printfn "%A" (CompileTerm termTest1) 
 //printfn "%A" (CompileTerm termTest2)        
 //printfn "%A" (getTokensBeforeOp beforeOpTest)
+printfn "%A" (CompileStatements statementsTest)
+printfn ""
 printfn "%A" (CompileReturnStatement returnTest)
 printfn ""
 printfn "%A" (CompileLetStatement letTest)
