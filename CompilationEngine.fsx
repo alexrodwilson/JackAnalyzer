@@ -1,5 +1,6 @@
 #load "Tokenizer.fs"
 open Tokenizer
+
 let deconstruct token = 
   match token with 
   | Identifier i -> i
@@ -24,13 +25,16 @@ let advanceUntil test tokens returnLastToken =
     | head::tail -> aux (head::toReturn) tail
   aux [] tokens
 
-let advanceUntilMatchingCurlyBracket tokens = 
+let advanceUntilMatchingBracket openingBracket closingBracket tokens includeBrackets = 
   let rec aux toReturn remainingTokens lbs rbs = 
     match remainingTokens with
     | [] -> failwith "No matching bracket found"
-    | head::tail when head = (Symbol '{') -> aux (head::toReturn) tail (lbs + 1) rbs
-    | head::tail when head = (Symbol '}') && (lbs = rbs + 1) -> List.rev (head::toReturn), tail
-    | head::tail when head = (Symbol '}') -> aux (head::toReturn) tail lbs (rbs + 1)
+    | head::tail when head = openingBracket -> aux (head::toReturn) tail (lbs + 1) rbs
+    | head::tail when head = closingBracket && (lbs = rbs + 1) ->
+      match includeBrackets with
+      | true -> List.rev (head::toReturn), tail
+      | false -> (List.rev toReturn).Tail, tail
+    | head::tail when head = closingBracket -> aux (head::toReturn) tail lbs (rbs + 1)
     | head::tail -> aux (head::toReturn) tail lbs rbs
   aux [] tokens 0 0
 
@@ -47,6 +51,7 @@ let getConsecutivePatterns startTest endTest tokens =
 
 let eatIf (test: Token list -> bool) (tokens: Token list) =
   match tokens with
+  | [] -> failwith "Testing an empty list for a token"
   | head::tail when (test tokens) -> tail
   | head::tail -> failwith ("Bad Argument " + (string head)) 
 
@@ -115,14 +120,12 @@ let rec CompileTerm (tokens: Token list) =
   | StringConstant s ->  toXmlAndWrap tokens.Head, tokens.Tail
   | Keyword k -> toXmlAndWrap tokens.Head, tokens.Tail
   | Symbol s when s = '(' -> 
-    let leftBracketXml = tokenToXml tokens.Head
-    let expressionTokens, remainingTokens = advanceUntil (fun x -> x = (Symbol ')')) tokens.Tail false
+    let expressionTokens, remainingTokens = advanceUntilMatchingBracket (Symbol '(') (Symbol ')') tokens false 
     let expressionXml = CompileExpression expressionTokens
-    let rightBracketXml = tokenToXml remainingTokens.Head
-    let termXml = $$"""{{leftBracketXml}}
+    let termXml = $$"""{{tokenToXml (Symbol '(')}}
 {{expressionXml}}
-{{rightBracketXml}}"""
-    wrapXml "term" termXml, remainingTokens.Tail       
+{{tokenToXml (Symbol ')')}}"""
+    wrapXml "term" termXml, remainingTokens       
   | Symbol s when (s = '-' || s = '~') -> 
     let unaryOpXml = tokenToXml tokens.Head
     let termXml, remainingTokens = CompileTerm tokens.Tail
@@ -234,7 +237,7 @@ let CompileReturnStatement tokens =
   (wrapXml "returnStatement" $$"""<keyword> return </keyword>{{expressionXml}}
 <symbol> ; </symbol>"""), tokens
 
-let CompileStatements tokens = 
+let rec CompileStatements tokens = 
   let rec aux tokens xml =
     match tokens with
     | [] -> xml, tokens
@@ -248,12 +251,47 @@ let CompileStatements tokens =
       let returnStatementXml, tokens = CompileReturnStatement tokens
       aux tokens (xml + "\n" + returnStatementXml)
     | head::tail when head = (Keyword "if") ->
-      failwith "not implemented yet"
+      let ifStatementXml, tokens = CompileIfStatement tokens
+      aux tokens (xml + "\n" + ifStatementXml)
     | head::tail when head = (Keyword "while") ->
       failwith "not implemented yet"
+    | head::tail -> failwith ("Unexpected token in CompileStatements" + (string head))
   let statementsXml, remainingTokens = aux tokens ""
   $$"""<statements>{{statementsXml}}
 </statements>""", remainingTokens
+
+and CompileIfStatement tokens =
+  let tokens = eatIf (isSameToken (Keyword "if")) tokens
+  let expressionTokens, tokens = advanceUntilMatchingBracket (Symbol '(') (Symbol ')') tokens false
+  let expressionXml = CompileExpression expressionTokens
+  let statementsTokens, tokens = advanceUntilMatchingBracket (Symbol '{') (Symbol '}') tokens false
+  let statementsXml, _ = CompileStatements statementsTokens
+  match tokens with
+  | head::tail when head = (Keyword "else") -> 
+    let tokens = eatIf (isSameToken (Keyword "else")) tokens 
+    let elseStatementsTokens, tokens =  advanceUntilMatchingBracket (Symbol '{') (Symbol '}') tokens false
+    let elseStatementsXml, _  = CompileStatements elseStatementsTokens
+    let elseXml = $$"""<keyword> else </keyword>
+{{tokenToXml (Symbol '{')}}
+{{elseStatementsXml}}
+{{tokenToXml (Symbol '}')}}"""
+    wrapXml "ifStatement" $$"""{{tokenToXml (Keyword "if")}}
+{{tokenToXml (Symbol '(')}}
+{{expressionXml}}
+{{tokenToXml (Symbol ')')}}
+{{tokenToXml (Symbol '{')}}
+{{statementsXml}}
+{{tokenToXml (Symbol '}')}}
+{{elseXml}}""", tokens
+
+  | _ ->  wrapXml "ifStatement" $$"""{{tokenToXml (Keyword "if")}}
+{{tokenToXml (Symbol '(')}}
+{{expressionXml}}
+{{tokenToXml (Symbol ')')}}
+{{tokenToXml (Symbol '{')}}
+{{statementsXml}}
+{{tokenToXml (Symbol '}')}}""", tokens
+
 
 let CompileVarDecs tokens =
   let patterns, remainingTokens = getConsecutivePatterns (fun x -> x = (Keyword "var")) (fun x -> x = (Symbol ';')) tokens
@@ -323,7 +361,7 @@ let CompileSubroutineDecs tokens =
     let parameterTokens, ts = advanceUntil (fun x -> x = (Symbol ')')) ts false
     let parameterXml, parameterCount = CompileParameterList parameterTokens 
     let ts = eatIf (isSameToken (Symbol ')')) ts
-    let subroutineBodyTokens, ts = advanceUntilMatchingCurlyBracket ts
+    let subroutineBodyTokens, ts = advanceUntilMatchingBracket (Symbol '{') (Symbol '}') ts true
     let subroutineBodyXml = CompileSubroutineBody subroutineBodyTokens
     $$"""<subroutineDec>
 {{tokenToXml constructorFunctionMethod}}
@@ -495,12 +533,15 @@ let subroutineCallTest2 = [Identifier "point"; Symbol '.'; Identifier "doSomethi
 let doTest = [Keyword "do"; Identifier "doSomething"; Symbol '('; IntConstant 1; Symbol '+'; IntConstant 2;
 Symbol ','; StringConstant "dog"; Symbol ','; Identifier "i"; Symbol ')'; Symbol ';']
 let statementsTest = List.concat [letTest; doTest; returnTest]
+let ifStatementTest = [Keyword "if"; Symbol '('; Symbol '('; IntConstant 1; Symbol '+'; IntConstant 3; Symbol ')'; Symbol '='; 
+  IntConstant 4; Symbol ')'; Symbol '{'; Keyword "do"; Identifier "someFunction"; Symbol '('; StringConstant "dog"; Symbol ')'; Symbol ';'; Symbol '}';
+  Keyword "else"; Symbol '{'; Keyword "do"; Identifier "someOtherFunction"; Symbol '('; IntConstant 69; Symbol ')'; Symbol ';'; Symbol '}']
 //printfn "%A" (CompileTerm termTest1) 
 //printfn "%A" (CompileTerm termTest2)        
 //printfn "%A" (getTokensBeforeOp beforeOpTest)
-printfn "%A" (indent 4 """This is a string that 
-a girl would be proud to bring home
-and show the mother""")
+//printfn "%A" (advanceUntilMatchingBracket (Symbol '(') (Symbol ')') [Symbol '('; Symbol '('; IntConstant 1; Symbol '+'; IntConstant 3; Symbol ')'; 
+ // Symbol '='; IntConstant 4; Symbol ')' ])
+printfn "%A" (CompileIfStatement ifStatementTest)
 printfn ""
 printfn "%A" (CompileStatements statementsTest)
 printfn ""
