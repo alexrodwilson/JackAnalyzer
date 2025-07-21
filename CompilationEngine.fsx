@@ -130,7 +130,7 @@ let rec CompileTerm (tokens: Token list) =
     let unaryOpXml = tokenToXml tokens.Head
     let termXml, remainingTokens = CompileTerm tokens.Tail
     (wrapXml "term" (unaryOpXml + "\n" + termXml), remainingTokens)
-  | Identifier i when tokens.Tail = [] -> toXmlAndWrap tokens.Head, tokens.Tail
+  | Identifier i when tokens.Tail = [] -> toXmlAndWrap tokens.Head, []
   | Identifier i when tokens.Tail.Head = (Symbol '[') ->
     let varNameXml = tokenToXml tokens.Head
     let leftBracketXml = tokenToXml tokens.Tail.Head
@@ -165,6 +165,7 @@ let rec CompileTerm (tokens: Token list) =
 {{tokenToXml (Symbol '(')}}
 {{expressionListXml}}
 {{tokenToXml (Symbol ')')}}""", tokens
+  | Identifier i -> toXmlAndWrap tokens.Head, tokens.Tail
   | _ -> failwith ("Unexpected token found in CompileTerm: " + (string tokens.Head))
 
 and CompileExpression tokens =
@@ -254,7 +255,8 @@ let rec CompileStatements tokens =
       let ifStatementXml, tokens = CompileIfStatement tokens
       aux tokens (xml + "\n" + ifStatementXml)
     | head::tail when head = (Keyword "while") ->
-      failwith "not implemented yet"
+      let whileStatementXml, tokens = CompileWhileStatement tokens
+      aux tokens (xml + "\n" + whileStatementXml)
     | head::tail -> failwith ("Unexpected token in CompileStatements" + (string head))
   let statementsXml, remainingTokens = aux tokens ""
   $$"""<statements>{{statementsXml}}
@@ -291,6 +293,16 @@ and CompileIfStatement tokens =
 {{tokenToXml (Symbol '{')}}
 {{statementsXml}}
 {{tokenToXml (Symbol '}')}}""", tokens
+
+
+and CompileWhileStatement tokens = 
+  let tokens = eatIf (isSameToken (Keyword "while")) tokens
+  let expressionTokens, tokens = advanceUntilMatchingBracket (Symbol '(') (Symbol ')') tokens false
+  let statementsTokens, tokens = advanceUntilMatchingBracket (Symbol '{') (Symbol '}') tokens false
+  let expressionXml = CompileExpression expressionTokens
+  let statementsXml, _ = CompileStatements statementsTokens
+  wrapXml "whileStatement" $$"""{{expressionXml}}
+{{statementsXml}}""", tokens
 
 
 let CompileVarDecs tokens =
@@ -541,6 +553,12 @@ let ifStatementTest = [Keyword "if"; Symbol '('; Symbol '('; IntConstant 1; Symb
 //printfn "%A" (getTokensBeforeOp beforeOpTest)
 //printfn "%A" (advanceUntilMatchingBracket (Symbol '(') (Symbol ')') [Symbol '('; Symbol '('; IntConstant 1; Symbol '+'; IntConstant 3; Symbol ')'; 
  // Symbol '='; IntConstant 4; Symbol ')' ])
+let whileStatementTest = [Keyword "while"; Symbol '('; Identifier "i"; Symbol '='; IntConstant 2; Symbol ')'; Symbol '{';
+  Keyword "let"; Identifier "x"; Symbol '='; IntConstant 2; Symbol '+'; IntConstant 3; Symbol ';';
+  Keyword "let"; Identifier "x"; Symbol '['; IntConstant 5; Symbol '-'; IntConstant 2; Symbol ']'; Symbol '='; StringConstant "dog"; Symbol ';';
+  Symbol '}']
+printfn "%A" (CompileWhileStatement whileStatementTest)
+printfn ""
 printfn "%A" (CompileIfStatement ifStatementTest)
 printfn ""
 printfn "%A" (CompileStatements statementsTest)
