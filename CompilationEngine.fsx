@@ -1,6 +1,6 @@
 #load "Tokenizer.fs"
 open Tokenizer
-let SPACES_PER_INDENT = 1
+let SPACES_PER_INDENT = 2
 let deconstruct token = 
   match token with 
   | Identifier i -> i
@@ -97,7 +97,6 @@ let maybeGetNextTokenIf test tokens =
   | _ -> None, tokens
 
 
-
 let isOp token = 
   let ops = ['+'; '-'; '*'; '/'; '&'; '|'; '<'; '>';'=']
   match token with
@@ -114,44 +113,44 @@ let wrapXml wrappingS sToWrap =
 
 
 let rec CompileTerm (tokens: Token list) nestingLevel = 
-  let toXmlAndWrap = tokenToXml >> (wrapXml "term")
-  let finalXml, leftOverTokens =
+ // let toXmlAndWrap = tokenToXml >> (wrapXml "term")
+  let innerXml, leftOverTokens =
     match tokens.Head with
-    | IntConstant i -> toXmlAndWrap tokens.Head, tokens.Tail
-    | StringConstant s ->  toXmlAndWrap tokens.Head, tokens.Tail
-    | Keyword k when (List.contains k ["true"; "false"; "null"; "this"]) -> toXmlAndWrap tokens.Head, tokens.Tail
+    | IntConstant i -> indent (nestingLevel + 1) (tokenToXml tokens.Head), tokens.Tail
+    | StringConstant s ->indent (nestingLevel + 1) (tokenToXml tokens.Head), tokens.Tail
+    | Keyword k when (List.contains k ["true"; "false"; "null"; "this"]) -> indent (nestingLevel + 1) (tokenToXml tokens.Head), tokens.Tail
     | Symbol s when s = '(' -> 
       let expressionTokens, remainingTokens = advanceUntilMatchingBracket (Symbol '(') (Symbol ')') tokens false 
       let expressionXml = CompileExpression expressionTokens (nestingLevel + 1)
-      let termXml = $$"""{{tokenToXml (Symbol '(')}}
+      let termXml = $$"""{{indent (nestingLevel + 1) (tokenToXml (Symbol '('))}}
 {{expressionXml}}
-{{tokenToXml (Symbol ')')}}"""
-      wrapXml "term" termXml, remainingTokens       
+{{indent (nestingLevel + 1) (tokenToXml (Symbol ')'))}}"""
+      termXml, remainingTokens       
     | Symbol s when (s = '-' || s = '~') -> 
       let unaryOpXml = tokenToXml tokens.Head
       let termXml, remainingTokens = CompileTerm tokens.Tail (nestingLevel + 1)
-      (wrapXml "term" (unaryOpXml + "\n" + termXml), remainingTokens)
-    | Identifier i when tokens.Tail = [] -> toXmlAndWrap tokens.Head, []
+      (unaryOpXml + "\n" + termXml), remainingTokens
+    | Identifier i when tokens.Tail = [] -> tokenToXml tokens.Head, []
     | Identifier i when tokens.Tail.Head = (Symbol '[') ->
       let varNameXml = tokenToXml tokens.Head
       let leftBracketXml = tokenToXml tokens.Tail.Head
       let expressionTokens, remainingTokens = advanceUntil (fun x -> x = (Symbol ']')) tokens.Tail.Tail false
       let expressionXml = CompileExpression expressionTokens (nestingLevel + 1)
       let rightBracketXml = tokenToXml remainingTokens.Head
-      wrapXml "term" $$"""{{varNameXml}}
-{{leftBracketXml}}
+      $$"""{{indent (nestingLevel + 1) varNameXml}}
+{{indent (nestingLevel + 1) leftBracketXml}}
 {{expressionXml}}
-{{rightBracketXml}}""", remainingTokens.Tail
+{{indent (nestingLevel + 1) rightBracketXml}}""", remainingTokens.Tail
     | Identifier i when tokens.Tail.Head = (Symbol '(') ->
       let subroutineName, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
       let tokens = eatIf (isSameToken (Symbol '(')) tokens
       let expressionListTokens, tokens = advanceUntil (fun x -> x = (Symbol ')')) tokens false
       let expressionListXml, count = CompileExpressionList expressionListTokens (nestingLevel + 1)
       let tokens = eatIf (isSameToken (Symbol ')')) tokens
-      wrapXml "term" $$"""{{tokenToXml subroutineName}}
-{{tokenToXml (Symbol '(')}}
+      $$"""{{indent (nestingLevel + 1) (tokenToXml subroutineName)}}
+{{indent (nestingLevel + 1) (tokenToXml (Symbol '('))}}
 {{expressionListXml}}
-{{tokenToXml (Symbol ')')}}""", tokens
+{{indent (nestingLevel + 1) (tokenToXml (Symbol ')'))}}""", tokens
     | Identifier i when tokens.Tail.Head = (Symbol '.') ->
       let classOrVarName, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
       let tokens = eatIf (isSameToken (Symbol '.')) tokens
@@ -160,15 +159,15 @@ let rec CompileTerm (tokens: Token list) nestingLevel =
       let expressionListTokens, tokens = advanceUntil (fun x -> x = (Symbol ')')) tokens false
       let expressionListXml, count = CompileExpressionList expressionListTokens (nestingLevel + 1)
       let tokens = eatIf (isSameToken (Symbol ')')) tokens
-      wrapXml "term" $$"""{{tokenToXml classOrVarName}}
-{{tokenToXml (Symbol '.')}}
-{{tokenToXml subroutineName}}
-{{tokenToXml (Symbol '(')}}
+      $$"""{{indent (nestingLevel + 1) (tokenToXml classOrVarName)}}
+{{indent (nestingLevel + 1) (tokenToXml (Symbol '.'))}}
+{{indent (nestingLevel + 1) (tokenToXml subroutineName)}}
+{{indent (nestingLevel + 1) (tokenToXml (Symbol '('))}}
 {{expressionListXml}}
-{{tokenToXml (Symbol ')')}}""", tokens
-    | Identifier i -> toXmlAndWrap tokens.Head, tokens.Tail
+{{indent (nestingLevel + 1) (tokenToXml (Symbol ')'))}}""", tokens
+    | Identifier i -> indent (nestingLevel + 1) (tokenToXml tokens.Head), tokens.Tail
     | _ -> failwith ("Unexpected token found in CompileTerm: " + (string tokens.Head))
-  (indent nestingLevel finalXml), leftOverTokens
+  (indent nestingLevel "<term>") + "\n" + innerXml + "\n" + (indent nestingLevel "</term>"), leftOverTokens
   
 
 and CompileExpression tokens nestingLevel =
