@@ -118,7 +118,7 @@ let rec CompileTerm (tokens: Token list) =
   match tokens.Head with
   | IntConstant i -> toXmlAndWrap tokens.Head, tokens.Tail
   | StringConstant s ->  toXmlAndWrap tokens.Head, tokens.Tail
-  | Keyword k -> toXmlAndWrap tokens.Head, tokens.Tail
+  | Keyword k when (List.contains k ["true"; "false"; "null"; "this"]) -> toXmlAndWrap tokens.Head, tokens.Tail
   | Symbol s when s = '(' -> 
     let expressionTokens, remainingTokens = advanceUntilMatchingBracket (Symbol '(') (Symbol ')') tokens false 
     let expressionXml = CompileExpression expressionTokens
@@ -216,7 +216,8 @@ let CompileLetStatement tokens =
   wrapXml "letStatement" $$"""<keyword> let </keyword>
 {{tokenToXml varName}}{{arrayIndexExpressionXml}}
 <symbol> = </symbol>
-{{rhsExpressionXml}}""", remainingTokens
+{{rhsExpressionXml}}
+{{tokenToXml (Symbol ';')}}""", remainingTokens
 
 let CompileDoStatement tokens =
   let tokens = eatIf (isSameToken (Keyword "do")) tokens
