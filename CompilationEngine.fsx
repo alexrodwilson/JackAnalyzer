@@ -14,6 +14,13 @@ let indent nestingLevel (string: string) =
   let s = string.Replace("\n", "\n" + spaces)
   spaces + s
 
+let indent2 nestingLevel (string: string) =
+  let spaces = String.replicate (nestingLevel * SPACES_PER_INDENT) " "
+  let lines = string.Split("\n")
+  let s = lines |> Array.map (fun x -> x.TrimStart())
+                |> String.concat ("\n" + spaces)
+  spaces + s
+  
 let advanceUntil test tokens returnLastToken = 
   let rec aux toReturn remainingTokens =
     match remainingTokens with
@@ -193,7 +200,7 @@ and CompileExpressionList tokens nestingLevel =
 {{xml}}{{indent nestingLevel "</expressionList>"}}""", count
     | head::tail when expectingExpression ->
       let currentExpressionTokens, remainingTokens = advanceUntil (fun x -> x = (Symbol ',')) remainingTokens false
-      let currentExpressionXml =  (CompileExpression currentExpressionTokens (nestingLevel + 1)) + "\n"
+      let currentExpressionXml =  (indent (nestingLevel + 1) (CompileExpression currentExpressionTokens 0)) + "\n"
       aux remainingTokens (xml + currentExpressionXml) (count + 1) false
     | head::tail when not expectingExpression ->
       let comma, remainingTokens = getNextTokenIf (isSameToken (Symbol ',')) remainingTokens
@@ -208,22 +215,24 @@ let CompileLetStatement tokens nestingLevel =
   let arrayIndexExpressionXml , tokens =
     match maybeLeftSquareBracket with
     | Some t -> let expressionTokens, tokens = advanceUntil (fun x -> x = (Symbol ']')) tokens false
-                let expressionXml = CompileExpression expressionTokens (nestingLevel + 1)
+                let expressionXml = CompileExpression expressionTokens 0
                 let tokens = eatIf (isSameToken (Symbol ']')) tokens
                 ($$"""
 {{indent (nestingLevel + 1) "<symbol> [ </symbol>"}}
-{{expressionXml}}
+{{indent (nestingLevel + 1) expressionXml}}
 {{indent (nestingLevel + 1) "<symbol> ] </symbol>"}} """), tokens
     | None -> ("", tokens)
   let tokens = eatIf (isSameToken (Symbol '=')) tokens
   let rhsExpressionTokens, remainingTokens = advanceUntil (fun x -> x = (Symbol ';')) tokens false
-  let rhsExpressionXml = CompileExpression rhsExpressionTokens (nestingLevel + 1)
+  let rhsExpressionXml = CompileExpression rhsExpressionTokens 0
   let remainingTokens = eatIf (isSameToken (Symbol ';')) remainingTokens
-  indent nestingLevel (wrapXml "letStatement" $$"""{{indent (nestingLevel + 1) "<keyword> let </keyword>"}}
+  $$"""{{indent nestingLevel "<letStatement>"}}
+{{indent (nestingLevel + 1) "<keyword> let </keyword>"}}
 {{indent (nestingLevel + 1) (tokenToXml varName)}}{{arrayIndexExpressionXml}}
 {{indent (nestingLevel + 1) (tokenToXml (Symbol '='))}}
-{{rhsExpressionXml}}
-{{indent (nestingLevel + 1) (tokenToXml (Symbol ';'))}}"""), remainingTokens
+{{indent (nestingLevel + 1) rhsExpressionXml}}
+{{indent (nestingLevel + 1) (tokenToXml (Symbol ';'))}}
+{{indent nestingLevel "</letStatement>"}}""", remainingTokens
 
 let CompileDoStatement tokens nestingLevel =
   let tokens = eatIf (isSameToken (Keyword "do")) tokens
@@ -564,6 +573,10 @@ let whileStatementTest = [Keyword "while"; Symbol '('; Identifier "i"; Symbol '=
   Keyword "let"; Identifier "x"; Symbol '['; IntConstant 5; Symbol '-'; IntConstant 2; Symbol ']'; Symbol '='; StringConstant "dog"; Symbol ';';
   Symbol '}']
 let expressionListTest = [IntConstant 4; Symbol '+'; IntConstant 2; Symbol ','; StringConstant "dog"; Symbol '+'; StringConstant "cat"; Symbol ','; Identifier "i"]
+printfn "%A" (indent 3 """This is the song that never ends
+  yes it goes on and on my friends
+  some people started singing it 
+    not knowing what it was""")
 printfn ""
 printfn "%A" (CompileExpressionList expressionListTest 1)
 printfn ""
