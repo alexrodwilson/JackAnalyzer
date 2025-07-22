@@ -130,7 +130,7 @@ let rec CompileTerm (tokens: Token list) nestingLevel =
       let unaryOpXml = tokenToXml tokens.Head
       let termXml, remainingTokens = CompileTerm tokens.Tail (nestingLevel + 1)
       (unaryOpXml + "\n" + termXml), remainingTokens
-    | Identifier i when tokens.Tail = [] -> tokenToXml tokens.Head, []
+    | Identifier i when tokens.Tail = [] -> indent (nestingLevel + 1 ) (tokenToXml tokens.Head), []
     | Identifier i when tokens.Tail.Head = (Symbol '[') ->
       let varNameXml = tokenToXml tokens.Head
       let leftBracketXml = tokenToXml tokens.Tail.Head
@@ -173,10 +173,12 @@ let rec CompileTerm (tokens: Token list) nestingLevel =
 and CompileExpression tokens nestingLevel =
   let rec aux expectingTerm remainingTokens xml =
     match remainingTokens with 
-    | [] -> wrapXml "expression" xml
+    | [] -> $$"""{{indent nestingLevel "<expression>"}}
+{{xml}}
+{{indent nestingLevel "</expression>"}}"""
     | head::tail when (not expectingTerm) -> 
       match head with
-      | _ when (isOp head) -> aux true tail (xml + "\n" + (tokenToXml head) + "\n")
+      | _ when (isOp head) -> aux true tail (xml + "\n" + (indent (nestingLevel + 1) (tokenToXml head)) + "\n")
       | _ -> failwith ("Unexpected token when expected op in expression: " + (string head))
     | head::tail -> 
       let termXml, remainingTokens = CompileTerm remainingTokens (nestingLevel + 1)
@@ -187,17 +189,17 @@ and CompileExpression tokens nestingLevel =
 and CompileExpressionList tokens nestingLevel = 
   let rec aux remainingTokens xml count expectingExpression =
     match remainingTokens with
-    | [] -> $$"""<expressionList>
-{{xml}}</expressionList>""", count
+    | [] -> $$"""{{indent nestingLevel "<expressionList>"}} 
+{{xml}}{{indent nestingLevel "</expressionList>"}}""", count
     | head::tail when expectingExpression ->
       let currentExpressionTokens, remainingTokens = advanceUntil (fun x -> x = (Symbol ',')) remainingTokens false
-      let currentExpressionXml = (CompileExpression currentExpressionTokens (nestingLevel + 1)) + "\n"
+      let currentExpressionXml =  (CompileExpression currentExpressionTokens (nestingLevel + 1)) + "\n"
       aux remainingTokens (xml + currentExpressionXml) (count + 1) false
     | head::tail when not expectingExpression ->
       let comma, remainingTokens = getNextTokenIf (isSameToken (Symbol ',')) remainingTokens
-      aux remainingTokens (xml + (tokenToXml comma) + "\n") count true
+      aux remainingTokens (xml + (indent (nestingLevel + 1) (tokenToXml comma)) + "\n") count true
   let xml, count = aux tokens "" 0 true
-  indent nestingLevel xml, count
+  xml, count
 
 let CompileLetStatement tokens nestingLevel = 
   let tokens = eatIf (isSameToken (Keyword "let")) tokens
@@ -544,7 +546,6 @@ let termTest6 = [Identifier "boris"]
 let beforeOpTest = [Symbol '('; IntConstant 3; Symbol '+'; IntConstant 1; Symbol ')'; Symbol '-'; IntConstant 2]
 let returnTest = [Keyword "return"; Identifier "doSomething"; Symbol '('; IntConstant 2; Symbol '+'; IntConstant 1; 
   Symbol ','; StringConstant "dog"; Symbol ','; Identifier "i"; Symbol ')'; Symbol ';'] 
-let expressionListTest = [ IntConstant 2; Symbol '+'; IntConstant 1; Symbol ','; StringConstant "dog"; Symbol ','; Identifier "i"]
 let subroutineCallTest2 = [Identifier "point"; Symbol '.'; Identifier "doSomething"; Symbol '('; IntConstant 1; Symbol '+'; IntConstant 2; Symbol '-'; IntConstant 1;
                            Symbol ')']
 let doTest = [Keyword "do"; Identifier "doSomething"; Symbol '('; IntConstant 1; Symbol '+'; IntConstant 2;
@@ -562,6 +563,11 @@ let whileStatementTest = [Keyword "while"; Symbol '('; Identifier "i"; Symbol '=
   Keyword "let"; Identifier "x"; Symbol '='; IntConstant 2; Symbol '+'; IntConstant 3; Symbol ';';
   Keyword "let"; Identifier "x"; Symbol '['; IntConstant 5; Symbol '-'; IntConstant 2; Symbol ']'; Symbol '='; StringConstant "dog"; Symbol ';';
   Symbol '}']
+let expressionListTest = [IntConstant 4; Symbol '+'; IntConstant 2; Symbol ','; StringConstant "dog"; Symbol '+'; StringConstant "cat"; Symbol ','; Identifier "i"]
+printfn "%A" (CompileExpressionList [] 1)
+printfn ""
+printfn "%A" (CompileExpressionList expressionListTest 1)
+printfn ""
 printfn "%A" (CompileWhileStatement whileStatementTest 1)
 printfn ""
 printfn "%A" (CompileIfStatement ifStatementTest 1)
