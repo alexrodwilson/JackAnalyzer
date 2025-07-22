@@ -219,11 +219,11 @@ let CompileLetStatement tokens nestingLevel =
   let rhsExpressionTokens, remainingTokens = advanceUntil (fun x -> x = (Symbol ';')) tokens false
   let rhsExpressionXml = CompileExpression rhsExpressionTokens (nestingLevel + 1)
   let remainingTokens = eatIf (isSameToken (Symbol ';')) remainingTokens
-  indent nestingLevel (wrapXml "letStatement" $$"""<keyword> let </keyword>
-{{tokenToXml varName}}{{arrayIndexExpressionXml}}
-<symbol> = </symbol>
+  indent nestingLevel (wrapXml "letStatement" $$"""{{indent (nestingLevel + 1) "<keyword> let </keyword>"}}
+{{indent (nestingLevel + 1) (tokenToXml varName)}}{{arrayIndexExpressionXml}}
+{{indent (nestingLevel + 1) (tokenToXml (Symbol '='))}}
 {{rhsExpressionXml}}
-{{tokenToXml (Symbol ';')}}"""), remainingTokens
+{{indent (nestingLevel + 1) (tokenToXml (Symbol ';'))}}"""), remainingTokens
 
 let CompileDoStatement tokens nestingLevel =
   let tokens = eatIf (isSameToken (Keyword "do")) tokens
@@ -564,7 +564,6 @@ let whileStatementTest = [Keyword "while"; Symbol '('; Identifier "i"; Symbol '=
   Keyword "let"; Identifier "x"; Symbol '['; IntConstant 5; Symbol '-'; IntConstant 2; Symbol ']'; Symbol '='; StringConstant "dog"; Symbol ';';
   Symbol '}']
 let expressionListTest = [IntConstant 4; Symbol '+'; IntConstant 2; Symbol ','; StringConstant "dog"; Symbol '+'; StringConstant "cat"; Symbol ','; Identifier "i"]
-printfn "%A" (CompileExpressionList [] 1)
 printfn ""
 printfn "%A" (CompileExpressionList expressionListTest 1)
 printfn ""
