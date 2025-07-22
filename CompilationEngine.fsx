@@ -251,10 +251,12 @@ let CompileReturnStatement tokens nestingLevel =
   let expressionXml =
     match expressionTokens with 
     | [] -> ""
-    | _ -> "\n" + (CompileExpression expressionTokens (nestingLevel + 1)) 
+    | _ -> "\n" + (CompileExpression expressionTokens 0) 
   let tokens = eatIf (isSameToken (Symbol ';')) tokens
-  indent nestingLevel (wrapXml "returnStatement" $$"""<keyword> return </keyword>{{expressionXml}}
-<symbol> ; </symbol>"""), tokens
+  $$"""{{indent nestingLevel "<returnStatement>"}}
+{{indent (nestingLevel + 1) "<keyword> return </keyword>"}}{{indent (nestingLevel + 1) expressionXml}}
+{{indent (nestingLevel + 1) "<symbol> ; </symbol>"}}
+{{indent nestingLevel "</returnStatement>"}}""", tokens
 
 let rec CompileStatements tokens nestingLevel = 
   let rec aux tokens xml =
