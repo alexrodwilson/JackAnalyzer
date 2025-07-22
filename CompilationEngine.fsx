@@ -237,11 +237,13 @@ let CompileLetStatement tokens nestingLevel =
 let CompileDoStatement tokens nestingLevel =
   let tokens = eatIf (isSameToken (Keyword "do")) tokens
   let subroutineCallTokens, tokens = advanceUntil (fun x -> x = (Symbol ';')) tokens false
-  let subroutineCallXml, notNeeded = CompileTerm subroutineCallTokens (nestingLevel + 1)
+  let subroutineCallXml, notNeeded = CompileTerm subroutineCallTokens 0
   let tokens = eatIf (isSameToken (Symbol ';')) tokens
-  indent nestingLevel (wrapXml "doStatement" $$"""<keyword> do </keyword>
-{{subroutineCallXml}}
-<symbol> ; </symbol>"""), tokens
+  $$"""{{indent nestingLevel "<doStatement>"}}
+{{indent (nestingLevel + 1) "<keyword> do </keyword>"}}
+{{indent (nestingLevel + 1) subroutineCallXml}}
+{{indent (nestingLevel + 1) "<symbol> ; </symbol>"}}
+{{indent nestingLevel "</doStatement>"}}""", tokens
 
 let CompileReturnStatement tokens nestingLevel = 
   let tokens = eatIf (isSameToken (Keyword "return")) tokens
