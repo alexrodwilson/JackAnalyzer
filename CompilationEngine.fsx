@@ -377,22 +377,26 @@ let CompileClassVarDecs tokens =
 let CompileParameterList tokens =
   let rec aux tokens count xml = 
     match tokens with
-    | [] -> let xml = "<parameterList>" + "\n" + xml + "</parameterList>" + "\n"
-            xml, count
-    | head::tail when head = Symbol ',' -> aux tail count (xml + (tokenToXml head) + "\n")
+    | [] -> 
+      let xml = $$"""<parameterList>
+{{indent 1 xml}}  
+</parameterList>"""
+      xml
+    | head::tail when head = Symbol ',' -> aux tail count (xml + "\n" + (tokenToXml head) + "\n")
                                            
-    | head::tail -> let typ, tokens = getNextTokenIf isTypeProgramStructure tokens
-                    let varName, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
-                    let newXml = $$"""{{tokenToXml typ}}
-{{tokenToXml varName}}
-"""
-                    aux tokens (count + 1) (xml + newXml)
-  aux tokens 0 ""
+    | head::tail -> 
+      let typ, tokens = getNextTokenIf isTypeProgramStructure tokens
+      let varName, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
+      let newXml = $$"""{{tokenToXml typ}}
+{{tokenToXml varName}}"""
+      aux tokens (count + 1) (xml + newXml)
+  match tokens with 
+  | [] -> """<parameterList> </parameterList>"""
+  | _ -> aux tokens 0 ""
         
 let CompileSubroutineBody (tokens: Token list) = 
   $$"""<symbol> { </symbol>
-<symbol> } </symbol>
-"""
+<symbol> } </symbol>"""
 
 let CompileSubroutineDecs tokens =
   let doOneSubroutineDec tokens =
@@ -401,20 +405,19 @@ let CompileSubroutineDecs tokens =
     let subroutineName, ts = getNextTokenIf (isSameType (Identifier "_")) ts
     let ts = eatIf (isSameToken (Symbol '(')) ts
     let parameterTokens, ts = advanceUntil (fun x -> x = (Symbol ')')) ts false
-    let parameterXml, parameterCount = CompileParameterList parameterTokens 
+    let parameterXml = CompileParameterList parameterTokens 
     let ts = eatIf (isSameToken (Symbol ')')) ts
     let subroutineBodyTokens, ts = advanceUntilMatchingBracket (Symbol '{') (Symbol '}') ts true
     let subroutineBodyXml = CompileSubroutineBody subroutineBodyTokens
     $$"""<subroutineDec>
-{{tokenToXml constructorFunctionMethod}}
-{{tokenToXml voidOrType}}
-{{tokenToXml subroutineName}}
-<symbol> ( </symbol>
-""" + parameterXml
-      + """<symbol> ) </symbol>
-"""
-      + subroutineBodyXml 
-      + """</subroutineDec>
+{{indent 1 (tokenToXml constructorFunctionMethod)}}
+{{indent 1 (tokenToXml voidOrType)}}
+{{indent 1 (tokenToXml subroutineName)}}
+{{indent 1 "<symbol> ( </symbol>"}}  
+{{indent 1 parameterXml}}
+{{indent 1 "<symbol> ) </symbol>"}}
+{{indent 1  subroutineBodyXml}}
+</subroutineDec>
 """
       , ts
   let rec aux remainingTokens xml =
@@ -482,6 +485,9 @@ let classVarDecsTest = [
   Keyword "int";
   Identifier "i";
   Symbol ';'
+  Identifier "No";
+  Identifier "Alarms";
+  Identifier "andNoSurprises"
 ]
 
 let subroutineDecsTest = [
@@ -591,6 +597,8 @@ let whileStatementTest = [Keyword "while"; Symbol '('; Identifier "i"; Symbol '=
   Keyword "let"; Identifier "x"; Symbol '['; IntConstant 5; Symbol '-'; IntConstant 2; Symbol ']'; Symbol '='; StringConstant "dog"; Symbol ';';
   Symbol '}'; Identifier "No"; Identifier "Surprises"; Identifier "Please"]
 let expressionListTest = [IntConstant 4; Symbol '+'; IntConstant 2; Symbol ','; StringConstant "dog"; Symbol '+'; StringConstant "cat"; Symbol ','; Identifier "i"]
+printfn "%A" (CompileSubroutineDecs subroutineDecsTest)
+printfn ""
 printfn "%A" (CompileClassVarDecs classVarDecsTest)
 printfn ""
 printfn "%A" (CompileIfStatement ifStatementTest2 1)
