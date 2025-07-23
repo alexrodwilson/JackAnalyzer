@@ -358,12 +358,12 @@ let CompileClassVarDecs tokens =
     let varName, listOfTokens = getNextTokenIf  (isSameType (Identifier "_")) listOfTokens
     let otherVarsXml = listOfTokens |> List.map tokenToXml
                                     |> List.reduce (fun x y -> x + "\n" + y)
-    $$"""<classVarDec>
-{{tokenToXml staticOrField}}
-{{tokenToXml typ}}
-{{tokenToXml varName}}
-{{otherVarsXml}}
-</classVarDec>
+    $$"""{{indent 1 "<classVarDec>"}}
+{{indent 2 (tokenToXml staticOrField)}}
+{{indent 2 (tokenToXml typ)}}
+{{indent 2 (tokenToXml varName)}}
+{{indent 2 otherVarsXml}}
+{{indent 1 "</classVarDec>"}}
 """
   match classVarDecPatterns with
   | [] -> "", remainingTokens
@@ -591,6 +591,8 @@ let whileStatementTest = [Keyword "while"; Symbol '('; Identifier "i"; Symbol '=
   Keyword "let"; Identifier "x"; Symbol '['; IntConstant 5; Symbol '-'; IntConstant 2; Symbol ']'; Symbol '='; StringConstant "dog"; Symbol ';';
   Symbol '}'; Identifier "No"; Identifier "Surprises"; Identifier "Please"]
 let expressionListTest = [IntConstant 4; Symbol '+'; IntConstant 2; Symbol ','; StringConstant "dog"; Symbol '+'; StringConstant "cat"; Symbol ','; Identifier "i"]
+printfn "%A" (CompileClassVarDecs classVarDecsTest)
+printfn ""
 printfn "%A" (CompileIfStatement ifStatementTest2 1)
 printfn ""
 printfn "%A" (CompileExpressionList expressionListTest 1)
