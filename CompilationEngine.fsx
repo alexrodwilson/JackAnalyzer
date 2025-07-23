@@ -263,24 +263,24 @@ let rec CompileStatements tokens nestingLevel =
     match tokens with
     | [] -> xml, tokens
     | head::tail when head = (Keyword "let") -> 
-      let letStatementXml, tokens = CompileLetStatement tokens (nestingLevel + 1)
+      let letStatementXml, tokens = CompileLetStatement tokens 0
       aux tokens (xml + "\n" + letStatementXml)
     | head::tail when head = (Keyword "do") ->
-      let doStatementXml, tokens = CompileDoStatement tokens (nestingLevel + 1)
+      let doStatementXml, tokens = CompileDoStatement tokens 0
       aux tokens (xml + "\n" + doStatementXml)
     | head::tail when head = (Keyword "return") ->
-      let returnStatementXml, tokens = CompileReturnStatement tokens (nestingLevel + 1)
+      let returnStatementXml, tokens = CompileReturnStatement tokens 0
       aux tokens (xml + "\n" + returnStatementXml)
     | head::tail when head = (Keyword "if") ->
-      let ifStatementXml, tokens = CompileIfStatement tokens (nestingLevel + 1)
+      let ifStatementXml, tokens = CompileIfStatement tokens 0
       aux tokens (xml + "\n" + ifStatementXml)
     | head::tail when head = (Keyword "while") ->
-      let whileStatementXml, tokens = CompileWhileStatement tokens (nestingLevel + 1)
+      let whileStatementXml, tokens = CompileWhileStatement tokens 0
       aux tokens (xml + "\n" + whileStatementXml)
     | head::tail -> failwith ("Unexpected token in CompileStatements" + (string head))
   let statementsXml, remainingTokens = aux tokens ""
-  indent nestingLevel $$"""<statements>{{statementsXml}}
-</statements>""", remainingTokens
+  indent nestingLevel $$"""{{indent nestingLevel "<statements>"}}{{indent (nestingLevel + 1) statementsXml}}
+{{indent nestingLevel "</statements>"}}""", remainingTokens
 
 and CompileIfStatement tokens nestingLevel =
   let tokens = eatIf (isSameToken (Keyword "if")) tokens
