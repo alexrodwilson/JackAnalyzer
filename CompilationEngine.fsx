@@ -296,24 +296,24 @@ and CompileIfStatement tokens nestingLevel =
     $$"""{{indent nestingLevel "<ifStatement>"}}
 {{indent (nestingLevel + 1) (tokenToXml (Keyword "if"))}}
 {{indent (nestingLevel + 1) (tokenToXml (Symbol '('))}}
-{{indent (nestingLevel + 2) expressionXml}}
+{{indent (nestingLevel + 1) expressionXml}}
 {{indent (nestingLevel + 1) (tokenToXml (Symbol ')'))}}
 {{indent (nestingLevel + 1) (tokenToXml (Symbol '{'))}}
-{{indent (nestingLevel + 2) statementsXml}}
+{{indent (nestingLevel + 1) statementsXml}}
 {{indent (nestingLevel + 1) (tokenToXml (Symbol '}'))}}
 {{indent (nestingLevel + 1) (tokenToXml (Keyword "else"))}}
 {{indent (nestingLevel + 1) (tokenToXml (Symbol '{'))}}
-{{indent (nestingLevel + 2) elseStatementsXml}}
+{{indent (nestingLevel + 1) elseStatementsXml}}
 {{indent (nestingLevel + 1) (tokenToXml (Symbol '}'))}}
 {{indent nestingLevel "</ifStatement>"}}""", tokens
 
   | _ ->  $$"""{{indent nestingLevel "<ifStatement>"}}
 {{indent (nestingLevel + 1) (tokenToXml (Keyword "if"))}}
 {{indent (nestingLevel + 1) (tokenToXml (Symbol '('))}}
-{{indent (nestingLevel + 2) expressionXml}}
+{{indent (nestingLevel + 1) expressionXml}}
 {{indent (nestingLevel + 1) (tokenToXml (Symbol ')'))}}
 {{indent (nestingLevel + 1) (tokenToXml (Symbol '{'))}}
-{{indent (nestingLevel + 2) statementsXml}}
+{{indent (nestingLevel + 1) statementsXml}}
 {{indent (nestingLevel + 1) (tokenToXml (Symbol '}'))}}
 {{indent nestingLevel "</ifStatement>"}}""", tokens
 
@@ -322,10 +322,17 @@ and CompileWhileStatement tokens nestingLevel =
   let tokens = eatIf (isSameToken (Keyword "while")) tokens
   let expressionTokens, tokens = advanceUntilMatchingBracket (Symbol '(') (Symbol ')') tokens false
   let statementsTokens, tokens = advanceUntilMatchingBracket (Symbol '{') (Symbol '}') tokens false
-  let expressionXml = CompileExpression expressionTokens (nestingLevel + 1)
-  let statementsXml, _ = CompileStatements statementsTokens (nestingLevel + 1)
-  wrapXml "whileStatement" $$"""{{expressionXml}}
-{{statementsXml}}""", tokens
+  let expressionXml = CompileExpression expressionTokens 0
+  let statementsXml, _ = CompileStatements statementsTokens 0
+  $$"""{{indent nestingLevel "<whileStatement>"}}
+{{indent (nestingLevel + 1) (tokenToXml (Keyword "while"))}}
+{{indent (nestingLevel + 1) (tokenToXml (Symbol '('))}}
+{{indent (nestingLevel + 1) expressionXml}}
+{{indent (nestingLevel + 1) (tokenToXml (Symbol ')'))}}
+{{indent (nestingLevel + 1) (tokenToXml (Symbol '{'))}}
+{{indent (nestingLevel + 1) statementsXml}}
+{{indent (nestingLevel + 1) (tokenToXml (Symbol '}'))}}
+{{indent nestingLevel "</whileStatement>"}}""", tokens
 
 
 let CompileVarDecs tokens =
@@ -582,7 +589,7 @@ let ifStatementTest2 = [Keyword "if"; Symbol '('; Symbol '('; IntConstant 1; Sym
 let whileStatementTest = [Keyword "while"; Symbol '('; Identifier "i"; Symbol '='; IntConstant 2; Symbol ')'; Symbol '{';
   Keyword "let"; Identifier "x"; Symbol '='; IntConstant 2; Symbol '+'; IntConstant 3; Symbol ';';
   Keyword "let"; Identifier "x"; Symbol '['; IntConstant 5; Symbol '-'; IntConstant 2; Symbol ']'; Symbol '='; StringConstant "dog"; Symbol ';';
-  Symbol '}']
+  Symbol '}'; Identifier "No"; Identifier "Surprises"; Identifier "Please"]
 let expressionListTest = [IntConstant 4; Symbol '+'; IntConstant 2; Symbol ','; StringConstant "dog"; Symbol '+'; StringConstant "cat"; Symbol ','; Identifier "i"]
 printfn "%A" (CompileIfStatement ifStatementTest2 1)
 printfn ""
