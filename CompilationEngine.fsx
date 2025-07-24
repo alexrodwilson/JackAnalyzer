@@ -14,13 +14,7 @@ let indent nestingLevel (string: string) =
   let s = string.Replace("\n", "\n" + spaces)
   spaces + s
 
-let indent2 nestingLevel (string: string) =
-  let spaces = String.replicate (nestingLevel * SPACES_PER_INDENT) " "
-  let lines = string.Split("\n")
-  let s = lines |> Array.map (fun x -> x.TrimStart())
-                |> String.concat ("\n" + spaces)
-  spaces + s
-  
+
 let advanceUntil test tokens returnLastToken = 
   let rec aux toReturn remainingTokens =
     match remainingTokens with
@@ -262,6 +256,7 @@ let rec CompileStatements tokens nestingLevel =
   let rec aux tokens xml =
     match tokens with
     | [] -> xml, tokens
+    | head::tail when head = Symbol '}' -> xml, tokens
     | head::tail when head = (Keyword "let") -> 
       let letStatementXml, tokens = CompileLetStatement tokens 0
       aux tokens (xml + "\n" + letStatementXml)
@@ -336,18 +331,26 @@ and CompileWhileStatement tokens nestingLevel =
 
 
 let CompileVarDecs tokens =
-  let patterns, remainingTokens = getConsecutivePatterns (fun x -> x = (Keyword "var")) (fun x -> x = (Symbol ';')) tokens
-  let compileOne tokens = 
-    let tokens = eatIf (isSameToken (Keyword "var")) tokens
-    let typ, tokens = getNextTokenIf isTypeProgramStructure tokens
-    let varName, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
-    let otherVarsXml =  tokens |> List.map tokenToXml
-                               |> List.reduce (fun x y -> x + "\n" + y)
-    $$"""{{tokenToXml typ}} 
-{{tokenToXml varName}}
-{{otherVarsXml}} """
-  patterns |> List.map  compileOne
-           |> (List.reduce (+)), remainingTokens
+  match tokens with
+  | [] -> "", []
+  | head::tail when head = Symbol '{' && tokens.Tail.Head = Symbol '}' -> "", []
+  | head::tail when head = Symbol '}' && tail = [] -> "", tokens
+  | _ -> 
+    let patterns, remainingTokens = getConsecutivePatterns (fun x -> x = (Keyword "var")) (fun x -> x = (Symbol ';')) tokens
+    let compileOne tokens = 
+      let tokens = eatIf (isSameToken (Keyword "var")) tokens
+      let typ, tokens = getNextTokenIf isTypeProgramStructure tokens
+      let varName, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
+      let otherVarsXml =  tokens |> List.map tokenToXml
+                                 |> List.reduce (fun x y -> x + "\n" + y)
+      $$"""<varDec>
+{{indent 1 "<keyword> var </keyword>"}}
+{{indent 1 (tokenToXml typ)}} 
+{{indent 1 (tokenToXml varName)}}
+{{indent 1 otherVarsXml}} 
+</varDec>"""
+    patterns |> List.map  compileOne
+             |> List.reduce (fun x y -> x + "\n" + y), remainingTokens
 
 
 let CompileClassVarDecs tokens = 
@@ -395,8 +398,36 @@ let CompileParameterList tokens =
   | _ -> aux tokens 0 ""
         
 let CompileSubroutineBody (tokens: Token list) = 
-  $$"""<symbol> { </symbol>
-<symbol> } </symbol>"""
+  let tokens = eatIf (isSameToken (Symbol '{')) tokens
+  let varDecsXml, tokens = CompileVarDecs tokens
+  let statementsXml, tokens = CompileStatements tokens 0
+  let tokens = eatIf (isSameToken (Symbol '}')) tokens
+  $$"""<subroutineBody>
+{{indent 1 "<symbol> { </symbol>"}}
+{{indent 1 varDecsXml}}
+{{indent 1 statementsXml}}
+{{indent 1 "<symbol> } </symbol>"}}
+</subroutineBody"""
+  (*let varDecPatterns, tokens = getConsecutivePatterns (fun x -> x = (Keyword "var")) (fun x -> x = (Symbol ';')) tokens
+  let compileVarDec varDecTokens =
+    let varDecTokens = eatIf (isSameToken (Keyword "var")) varDecTokens
+    let typ, varDecTokens = getTokenIf isTypeProgramStructure varDecTokens
+    let varName, varDecTokens = getTokenIf (isSameType (Identifier "_")) varDecTokens
+    let handleCommaThenVarName expectingComma ts xml
+      match ts with
+      | head::tail when head = (Symbol ';') -> xml
+      | head::tail when head = (Symbol ',') && expectingComma -> handleCommaThenVarName false tail (xml + "\n" + (tokenToXml head))
+      | head::tail when ((isSameType (Identifier "_")) ts) && not expectingComma -> handleCommaThenVarName true tail (xml + "\n" + (tokenToXml head))
+      | head::tail -> failwith ("Unexpected token in CompileSubroutineBody: " + (string head))
+    let commaAndVarXml = handleCommaThenVarName true varDecTokens ""
+    $$"""{{tokenToXml (Keyword "var")}}
+{{tokenToXml type}}
+{{tokenToXml varName}}
+{{commaAndVarXml}}"""
+  varDecPatterns |> List.map*)
+  
+
+    
 
 let CompileSubroutineDecs tokens =
   let doOneSubroutineDec tokens =
@@ -597,7 +628,18 @@ let whileStatementTest = [Keyword "while"; Symbol '('; Identifier "i"; Symbol '=
   Keyword "let"; Identifier "x"; Symbol '['; IntConstant 5; Symbol '-'; IntConstant 2; Symbol ']'; Symbol '='; StringConstant "dog"; Symbol ';';
   Symbol '}'; Identifier "No"; Identifier "Surprises"; Identifier "Please"]
 let expressionListTest = [IntConstant 4; Symbol '+'; IntConstant 2; Symbol ','; StringConstant "dog"; Symbol '+'; StringConstant "cat"; Symbol ','; Identifier "i"]
-printfn "%A" (CompileSubroutineDecs subroutineDecsTest)
+let subroutineBodyTest = List.concat [[Symbol '{'; Keyword "var"; Keyword "int"; Identifier "i"; Symbol ','; Identifier "j"; Symbol ';'; Keyword "var"; Identifier "String"; Identifier "s"; Symbol ';';]; statementsTest; [Symbol '}']]
+let emptyBracketsTest = [Symbol '{'; Symbol '}']
+//printfn "%A" (CompileSubroutineDecs subroutineDecsTest)
+//printfn "%A" (getConsecutivePatterns (fun x -> false) (fun x -> false) [Symbol ';'; Identifier "plop"]) 
+//printfn ""
+printfn "%A" (CompileSubroutineBody emptyBracketsTest)
+printfn ""
+printfn "%A" (CompileSubroutineBody subroutineBodyTest)
+printfn ""
+printfn "%A" (CompileVarDecs [Symbol '{'; Symbol '}'])
+printfn ""
+printfn "%A" (CompileVarDecs varDecsTest)
 printfn ""
 printfn "%A" (CompileClassVarDecs classVarDecsTest)
 printfn ""
