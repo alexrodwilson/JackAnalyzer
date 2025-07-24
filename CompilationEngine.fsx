@@ -361,19 +361,18 @@ let CompileClassVarDecs tokens =
     let varName, listOfTokens = getNextTokenIf  (isSameType (Identifier "_")) listOfTokens
     let otherVarsXml = listOfTokens |> List.map tokenToXml
                                     |> List.reduce (fun x y -> x + "\n" + y)
-    $$"""{{indent 1 "<classVarDec>"}}
-{{indent 2 (tokenToXml staticOrField)}}
-{{indent 2 (tokenToXml typ)}}
-{{indent 2 (tokenToXml varName)}}
-{{indent 2 otherVarsXml}}
-{{indent 1 "</classVarDec>"}}
-"""
+    $$"""<classVarDec>"
+{{indent 1 (tokenToXml staticOrField)}}
+{{indent 1 (tokenToXml typ)}}
+{{indent 1 (tokenToXml varName)}}
+{{indent 1 otherVarsXml}}
+</classVarDec>"""
   match classVarDecPatterns with
   | [] -> "", remainingTokens
   | _ ->
     let xml = classVarDecPatterns
               |> List.map doOneDec
-              |> List.reduce (+)
+              |> List.reduce (fun x y -> x + "\n" + y)
     (xml, remainingTokens)
 
 
@@ -453,12 +452,11 @@ let CompileSubroutineDecs tokens =
       , ts
   let rec aux remainingTokens xml =
     match remainingTokens with
-    | [] -> xml
     | head::tail when head = Keyword "constructor" || head = Keyword "function" || head = Keyword "method" -> 
       let oneDecXml, remainingTokens = doOneSubroutineDec remainingTokens
       let xml = xml + oneDecXml
       aux remainingTokens xml
-    | head::tail -> failwith ("Wrong Token when compiling subroutine declarations " + (string head))
+    | _ -> xml, remainingTokens
   aux tokens ""
 
     
@@ -467,16 +465,15 @@ let CompileClass tokens =
  let className, tokens = getNextTokenIf ((isSameType (Identifier "_"))) tokens
  let tokens = eatIf (isSameToken (Symbol '{')) tokens
  let classVarDecs, tokens = CompileClassVarDecs tokens
- let classSubroutineDecs = CompileSubroutineDecs tokens
+ let classSubroutineDecs, tokens = CompileSubroutineDecs tokens
  let tokens = eatIf (isSameToken (Symbol '}')) tokens
  $$"""<class>
-<keyword> class </keyword>
-<keyword> {{deconstruct className}} </keyword>
-<symbol> { </symbol>
-"""
-  + classVarDecs
-  + classSubroutineDecs
-  + """<symbol> } </symbol>
+{{indent 1 "<keyword> class </keyword>"}}
+{{indent 1 (tokenToXml className)}}
+{{indent 1 "<symbol> { </symbol>"}}
+{{indent 2 classVarDecs}}
+{{indent 2 classSubroutineDecs}}
+{{indent 1 "<symbol> } </symbol>"}}
 </class>
 """
 
@@ -516,35 +513,9 @@ let classVarDecsTest = [
   Keyword "int";
   Identifier "i";
   Symbol ';'
-  Identifier "No";
-  Identifier "Alarms";
-  Identifier "andNoSurprises"
 ]
 
-let subroutineDecsTest = [
-  Keyword "function";
-  Keyword "void";
-  Identifier "more";
-  Symbol '(';  
-  Identifier "Point";
-  Identifier "p";
-  Symbol ',';
-  Keyword "int";
-  Identifier "i";
-  Symbol ',';
-  Keyword "boolean";
-  Identifier "b";
-  Symbol ')';
-  Symbol '{';
-  Symbol '}';
-  Keyword "constructor";
-  Keyword "int";
-  Identifier "main";
-  Symbol '(';
-  Symbol ')';
-  Symbol '{';
-  Symbol '}'
-]
+
 let oneSubroutineTest = [
   Keyword "function";
   Keyword "void";
@@ -611,6 +582,30 @@ let subroutineCallTest2 = [Identifier "point"; Symbol '.'; Identifier "doSomethi
 let doTest = [Keyword "do"; Identifier "doSomething"; Symbol '('; IntConstant 1; Symbol '+'; IntConstant 2;
 Symbol ','; StringConstant "dog"; Symbol ','; Identifier "i"; Symbol ')'; Symbol ';']
 let statementsTest = List.concat [letTest; doTest; returnTest]
+let subroutineBodyTest = List.concat [[Symbol '{'; Keyword "var"; Keyword "int"; Identifier "i"; Symbol ','; Identifier "j"; Symbol ';'; 
+  Keyword "var"; Identifier "String"; Identifier "s"; Symbol ';';]; statementsTest; [Symbol '}']]
+let subroutineDecsTest = List.concat[
+  [Keyword "function";
+  Keyword "void";
+  Identifier "more";
+  Symbol '(';  
+  Identifier "Point";
+  Identifier "p";
+  Symbol ',';
+  Keyword "int";
+  Identifier "i";
+  Symbol ',';
+  Keyword "boolean";
+  Identifier "b";
+  Symbol ')';];
+  subroutineBodyTest;
+ [Keyword "constructor";
+  Keyword "int";
+  Identifier "main";
+  Symbol '(';
+  Symbol ')';
+  Symbol '{';
+  Symbol '}']]
 let ifStatementTest = [Keyword "if"; Symbol '('; Symbol '('; IntConstant 1; Symbol '+'; IntConstant 3; Symbol ')'; Symbol '='; 
   IntConstant 4; Symbol ')'; Symbol '{'; Keyword "do"; Identifier "someFunction"; Symbol '('; StringConstant "dog"; Symbol ')'; Symbol ';'; Symbol '}';
   Keyword "else"; Symbol '{'; Keyword "do"; Identifier "someOtherFunction"; Symbol '('; IntConstant 69; Symbol ')'; Symbol ';'; Symbol '}';
@@ -628,11 +623,15 @@ let whileStatementTest = [Keyword "while"; Symbol '('; Identifier "i"; Symbol '=
   Keyword "let"; Identifier "x"; Symbol '['; IntConstant 5; Symbol '-'; IntConstant 2; Symbol ']'; Symbol '='; StringConstant "dog"; Symbol ';';
   Symbol '}'; Identifier "No"; Identifier "Surprises"; Identifier "Please"]
 let expressionListTest = [IntConstant 4; Symbol '+'; IntConstant 2; Symbol ','; StringConstant "dog"; Symbol '+'; StringConstant "cat"; Symbol ','; Identifier "i"]
-let subroutineBodyTest = List.concat [[Symbol '{'; Keyword "var"; Keyword "int"; Identifier "i"; Symbol ','; Identifier "j"; Symbol ';'; Keyword "var"; Identifier "String"; Identifier "s"; Symbol ';';]; statementsTest; [Symbol '}']]
+
+let classTest = List.concat [[Keyword "class"; Identifier "Point"; Symbol '{'] ; classVarDecsTest; subroutineDecsTest; [Symbol '}']]
+
 let emptyBracketsTest = [Symbol '{'; Symbol '}']
-//printfn "%A" (CompileSubroutineDecs subroutineDecsTest)
+printfn "%A" (CompileClass classTest)
+printfn ""
+printfn "%A" (CompileSubroutineDecs subroutineDecsTest)
 //printfn "%A" (getConsecutivePatterns (fun x -> false) (fun x -> false) [Symbol ';'; Identifier "plop"]) 
-//printfn ""
+printfn ""
 printfn "%A" (CompileSubroutineBody emptyBracketsTest)
 printfn ""
 printfn "%A" (CompileSubroutineBody subroutineBodyTest)
