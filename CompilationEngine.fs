@@ -343,15 +343,14 @@ let CompileVarDecs tokens =
       let typ, tokens = getNextTokenIf isTypeProgramStructure tokens
       let varName, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
       let otherVarsXml =  tokens |> List.map tokenToXml
-                                 |> List.reduce (fun x y -> x + "\n" + y)
+                                 |> List.fold (fun x y -> x + "\n" + y) ""
       $$"""<varDec>
 {{indent 1 "<keyword> var </keyword>"}}
 {{indent 1 (tokenToXml typ)}} 
-{{indent 1 (tokenToXml varName)}}
-{{indent 1 otherVarsXml}} 
+{{indent 1 (tokenToXml varName)}}{{indent 1 otherVarsXml}} 
 </varDec>"""
     patterns |> List.map  compileOne
-             |> List.reduce (fun x y -> x + "\n" + y), remainingTokens
+             |> List.fold (fun x y -> x + "\n" + y) "", remainingTokens
 
 
 let CompileClassVarDecs tokens = 
@@ -373,7 +372,7 @@ let CompileClassVarDecs tokens =
   | _ ->
     let xml = classVarDecPatterns
               |> List.map doOneDec
-              |> List.reduce (fun x y -> x + "\n" + y)
+              |> List.reduce (fun x y -> x + "\n" + y) 
     (xml, remainingTokens)
 
 
@@ -403,8 +402,7 @@ let CompileSubroutineBody (tokens: Token list) =
   let statementsXml, tokens = CompileStatements tokens 0
   let tokens = eatIf (isSameToken (Symbol '}')) tokens
   $$"""<subroutineBody>
-{{indent 1 "<symbol> { </symbol>"}}
-{{indent 1 varDecsXml}}
+{{indent 1 "<symbol> { </symbol>"}}{{indent 1 varDecsXml}}
 {{indent 1 statementsXml}}
 {{indent 1 "<symbol> } </symbol>"}}
 </subroutineBody"""
