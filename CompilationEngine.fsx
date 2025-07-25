@@ -204,7 +204,7 @@ and CompileExpressionList tokens nestingLevel =
   let xml, count = aux tokens "" 0 true
   xml, count
 
-let CompileLetStatement tokens nestingLevel = 
+let CompileLetStatement2 tokens nestingLevel = 
   let tokens = eatIf (isSameToken (Keyword "let")) tokens
   let varName, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
   let maybeLeftSquareBracket, tokens = maybeGetNextTokenIf (isSameToken (Symbol '[')) tokens
@@ -218,6 +218,31 @@ let CompileLetStatement tokens nestingLevel =
 {{indent (nestingLevel + 1) expressionXml}}
 {{indent (nestingLevel + 1) "<symbol> ] </symbol>"}} """), tokens
     | None -> ("", tokens)
+  let tokens = eatIf (isSameToken (Symbol '=')) tokens
+  let rhsExpressionTokens, remainingTokens = advanceUntil (fun x -> x = (Symbol ';')) tokens false
+  let rhsExpressionXml = CompileExpression rhsExpressionTokens 0
+  let remainingTokens = eatIf (isSameToken (Symbol ';')) remainingTokens
+  $$"""{{indent nestingLevel "<letStatement>"}}
+{{indent (nestingLevel + 1) "<keyword> let </keyword>"}}
+{{indent (nestingLevel + 1) (tokenToXml varName)}}{{arrayIndexExpressionXml}}
+{{indent (nestingLevel + 1) (tokenToXml (Symbol '='))}}
+{{indent (nestingLevel + 1) rhsExpressionXml}}
+{{indent (nestingLevel + 1) (tokenToXml (Symbol ';'))}}
+{{indent nestingLevel "</letStatement>"}}""", remainingTokens
+
+let CompileLetStatement tokens nestingLevel = 
+  let tokens = eatIf (isSameToken (Keyword "let")) tokens
+  let varName, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
+  let arrayIndexExpressionXml, tokens = 
+    match tokens.Head with
+    | Symbol s when s = '[' -> 
+      let expressionTokens, tokens = advanceUntilMatchingBracket (Symbol '[') (Symbol ']') tokens false
+      let expressionXml = CompileExpression expressionTokens 0
+      ($$"""
+{{indent (nestingLevel + 1) "<symbol> [ </symbol>"}}
+{{indent (nestingLevel + 1) expressionXml}}
+{{indent (nestingLevel + 1) "<symbol> ] </symbol>"}} """), tokens
+    | Symbol s when s = '=' -> "", tokens
   let tokens = eatIf (isSameToken (Symbol '=')) tokens
   let rhsExpressionTokens, remainingTokens = advanceUntil (fun x -> x = (Symbol ';')) tokens false
   let rhsExpressionXml = CompileExpression rhsExpressionTokens 0
