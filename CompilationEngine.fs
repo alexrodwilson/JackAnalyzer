@@ -346,7 +346,7 @@ let CompileClassVarDecs tokens =
     let varName, listOfTokens = getNextTokenIf  (isSameType (Identifier "_")) listOfTokens
     let otherVarsXml = listOfTokens |> List.map tokenToXml
                                     |> List.reduce (fun x y -> x + "\n" + y)
-    $$"""<classVarDec>"
+    $$"""<classVarDec>
 {{indent 1 (tokenToXml staticOrField)}}
 {{indent 1 (tokenToXml typ)}}
 {{indent 1 (tokenToXml varName)}}
@@ -390,7 +390,7 @@ let CompileSubroutineBody (tokens: Token list) =
 {{indent 1 "<symbol> { </symbol>"}}{{indent 1 varDecsXml}}
 {{indent 1 statementsXml}}
 {{indent 1 "<symbol> } </symbol>"}}
-</subroutineBody"""
+</subroutineBody>"""
     
 
 let CompileSubroutineDecs tokens =
@@ -412,14 +412,13 @@ let CompileSubroutineDecs tokens =
 {{indent 1 parameterXml}}
 {{indent 1 "<symbol> ) </symbol>"}}
 {{indent 1  subroutineBodyXml}}
-</subroutineDec>
-"""
+</subroutineDec>"""
       , ts
   let rec aux remainingTokens xml =
     match remainingTokens with
     | head::tail when head = Keyword "constructor" || head = Keyword "function" || head = Keyword "method" -> 
       let oneDecXml, remainingTokens = doOneSubroutineDec remainingTokens
-      let xml = xml + oneDecXml
+      let xml = xml + "\n" + oneDecXml
       aux remainingTokens xml
     | _ -> xml, remainingTokens
   aux tokens ""
@@ -436,8 +435,7 @@ let CompileClass tokens =
 {{indent 1 "<keyword> class </keyword>"}}
 {{indent 1 (tokenToXml className)}}
 {{indent 1 "<symbol> { </symbol>"}}
-{{indent 2 classVarDecs}}
-{{indent 2 classSubroutineDecs}}
+{{indent 2 classVarDecs}}{{indent 2 classSubroutineDecs}}
 {{indent 1 "<symbol> } </symbol>"}}
 </class>
 """
