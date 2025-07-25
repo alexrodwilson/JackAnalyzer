@@ -1,6 +1,6 @@
 module CompilationEngine
-open Tokenizer
-
+//open Tokenizer
+#load "Tokenizer.fs"
 let SPACES_PER_INDENT = 2
 let deconstruct token = 
   match token with 
@@ -30,7 +30,11 @@ let advanceUntil test tokens returnLastToken =
 let advanceUntilMatchingBracket openingBracket closingBracket tokens includeBrackets = 
   let rec aux toReturn remainingTokens lbs rbs = 
     match remainingTokens with
-    | [] -> failwith "No matching bracket found"
+    | [] -> 
+      printfn "toReturn: %A"  toReturn
+      printfn ""
+      printfn "remainingTokens: %A" remainingTokens
+      failwith ("No matching bracket found")
     | head::tail when head = openingBracket -> aux (head::toReturn) tail (lbs + 1) rbs
     | head::tail when head = closingBracket && (lbs = rbs + 1) ->
       match includeBrackets with

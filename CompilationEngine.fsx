@@ -1,3 +1,5 @@
+//module CompilationEngine
+//open Tokenizer
 #load "Tokenizer.fs"
 open Tokenizer
 let SPACES_PER_INDENT = 2
@@ -29,7 +31,11 @@ let advanceUntil test tokens returnLastToken =
 let advanceUntilMatchingBracket openingBracket closingBracket tokens includeBrackets = 
   let rec aux toReturn remainingTokens lbs rbs = 
     match remainingTokens with
-    | [] -> failwith "No matching bracket found"
+    | [] -> 
+      printfn "toReturn: %A"  toReturn
+      printfn ""
+      printfn "remainingTokens: %A" remainingTokens
+      failwith ("No matching bracket found")
     | head::tail when head = openingBracket -> aux (head::toReturn) tail (lbs + 1) rbs
     | head::tail when head = closingBracket && (lbs = rbs + 1) ->
       match includeBrackets with
@@ -135,7 +141,7 @@ let rec CompileTerm (tokens: Token list) nestingLevel =
     | Identifier i when tokens.Tail.Head = (Symbol '[') ->
       let varNameXml = tokenToXml tokens.Head
       let leftBracketXml = tokenToXml tokens.Tail.Head
-      let expressionTokens, remainingTokens = advanceUntil (fun x -> x = (Symbol ']')) tokens.Tail.Tail false
+      let expressionTokens, remainingTokens = advanceUntilMatchingBracket (Symbol '[') (Symbol ']') tokens.Tail false
       let expressionXml = CompileExpression expressionTokens (nestingLevel + 1)
       let rightBracketXml = tokenToXml remainingTokens.Head
       $$"""{{indent (nestingLevel + 1) varNameXml}}
@@ -144,10 +150,8 @@ let rec CompileTerm (tokens: Token list) nestingLevel =
 {{indent (nestingLevel + 1) rightBracketXml}}""", remainingTokens.Tail
     | Identifier i when tokens.Tail.Head = (Symbol '(') ->
       let subroutineName, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
-      let tokens = eatIf (isSameToken (Symbol '(')) tokens
-      let expressionListTokens, tokens = advanceUntil (fun x -> x = (Symbol ')')) tokens false
+      let expressionListTokens, tokens = advanceUntilMatchingBracket (Symbol '(') (Symbol ')') tokens false
       let expressionListXml, count = CompileExpressionList expressionListTokens (nestingLevel + 1)
-      let tokens = eatIf (isSameToken (Symbol ')')) tokens
       $$"""{{indent (nestingLevel + 1) (tokenToXml subroutineName)}}
 {{indent (nestingLevel + 1) (tokenToXml (Symbol '('))}}
 {{expressionListXml}}
@@ -156,10 +160,8 @@ let rec CompileTerm (tokens: Token list) nestingLevel =
       let classOrVarName, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
       let tokens = eatIf (isSameToken (Symbol '.')) tokens
       let subroutineName, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
-      let tokens = eatIf (isSameToken (Symbol '(')) tokens
-      let expressionListTokens, tokens = advanceUntil (fun x -> x = (Symbol ')')) tokens false
+      let expressionListTokens, tokens = advanceUntilMatchingBracket (Symbol '(') (Symbol ')') tokens false
       let expressionListXml, count = CompileExpressionList expressionListTokens (nestingLevel + 1)
-      let tokens = eatIf (isSameToken (Symbol ')')) tokens
       $$"""{{indent (nestingLevel + 1) (tokenToXml classOrVarName)}}
 {{indent (nestingLevel + 1) (tokenToXml (Symbol '.'))}}
 {{indent (nestingLevel + 1) (tokenToXml subroutineName)}}
@@ -342,15 +344,14 @@ let CompileVarDecs tokens =
       let typ, tokens = getNextTokenIf isTypeProgramStructure tokens
       let varName, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
       let otherVarsXml =  tokens |> List.map tokenToXml
-                                 |> List.reduce (fun x y -> x + "\n" + y)
+                                 |> List.fold (fun x y -> x + "\n" + y) ""
       $$"""<varDec>
 {{indent 1 "<keyword> var </keyword>"}}
 {{indent 1 (tokenToXml typ)}} 
-{{indent 1 (tokenToXml varName)}}
-{{indent 1 otherVarsXml}} 
+{{indent 1 (tokenToXml varName)}}{{indent 1 otherVarsXml}} 
 </varDec>"""
     patterns |> List.map  compileOne
-             |> List.reduce (fun x y -> x + "\n" + y), remainingTokens
+             |> List.fold (fun x y -> x + "\n" + y) "", remainingTokens
 
 
 let CompileClassVarDecs tokens = 
@@ -372,7 +373,7 @@ let CompileClassVarDecs tokens =
   | _ ->
     let xml = classVarDecPatterns
               |> List.map doOneDec
-              |> List.reduce (fun x y -> x + "\n" + y)
+              |> List.reduce (fun x y -> x + "\n" + y) 
     (xml, remainingTokens)
 
 
@@ -402,8 +403,7 @@ let CompileSubroutineBody (tokens: Token list) =
   let statementsXml, tokens = CompileStatements tokens 0
   let tokens = eatIf (isSameToken (Symbol '}')) tokens
   $$"""<subroutineBody>
-{{indent 1 "<symbol> { </symbol>"}}
-{{indent 1 varDecsXml}}
+{{indent 1 "<symbol> { </symbol>"}}{{indent 1 varDecsXml}}
 {{indent 1 statementsXml}}
 {{indent 1 "<symbol> } </symbol>"}}
 </subroutineBody"""
