@@ -58,6 +58,7 @@ let eatIf (test: Token list -> bool) (tokens: Token list) =
 
 let getNextTokenIf test tokens = 
   match tokens with
+  | [] -> failwith "No tokens found"
   | head::tail when (test tokens) -> head, tail
   | head::tail -> failwith ("Bad Argument " + (string head)) 
 
@@ -186,6 +187,7 @@ and CompileExpressionList tokens nestingLevel =
     | head::tail when not expectingExpression ->
       let comma, remainingTokens = getNextTokenIf (isSameToken (Symbol ',')) remainingTokens
       aux remainingTokens (xml + (indent (nestingLevel + 1) (tokenToXml comma)) + "\n") count true
+    | head::tail -> failwith ("Unexpected input to expressionList" + (string head))
   let xml, count = aux tokens "" 0 true
   xml, count
 
@@ -202,6 +204,7 @@ let CompileLetStatement tokens nestingLevel =
 {{indent (nestingLevel + 1) expressionXml}}
 {{indent (nestingLevel + 1) "<symbol> ] </symbol>"}} """), tokens
     | Symbol s when s = '=' -> "", tokens
+    | _ -> failwith ("Unexpected token found in CompileLetStatement: " + (string tokens.Head))
   let tokens = eatIf (isSameToken (Symbol '=')) tokens
   let rhsExpressionTokens, remainingTokens = advanceUntil (fun x -> x = (Symbol ';')) tokens false
   let rhsExpressionXml = CompileExpression rhsExpressionTokens 0
@@ -213,7 +216,7 @@ let CompileLetStatement tokens nestingLevel =
 {{indent (nestingLevel + 1) rhsExpressionXml}}
 {{indent (nestingLevel + 1) (tokenToXml (Symbol ';'))}}
 {{indent nestingLevel "</letStatement>"}}""", remainingTokens
-
+    
 let CompileDoStatement tokens nestingLevel =
   let tokens = eatIf (isSameToken (Keyword "do")) tokens
   let subroutineCallTokens, tokens = advanceUntil (fun x -> x = (Symbol ';')) tokens false
