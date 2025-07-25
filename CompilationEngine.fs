@@ -1,14 +1,9 @@
 module CompilationEngine
-//open Tokenizer
-#load "Tokenizer.fs"
+//#load "Tokenizer.fs"
+open Tokenizer
+
 let SPACES_PER_INDENT = 2
-let deconstruct token = 
-  match token with 
-  | Identifier i -> i
-  | Keyword k -> k
-  | Symbol s -> (string s)
-  | IntConstant i -> (string i)
-  | StringConstant s -> s
+
 
 let indent nestingLevel (string: string) = 
   let spaces = String.replicate (nestingLevel * SPACES_PER_INDENT) " "
@@ -112,14 +107,7 @@ let isOp token =
 let getTokensBeforeOp tokens = 
   advanceUntil (fun x -> isOp x) tokens false
 
-let wrapXml wrappingS sToWrap =
-  $$"""<{{wrappingS}}> 
-{{sToWrap}} 
-</{{wrappingS}}>"""
-
-
 let rec CompileTerm (tokens: Token list) nestingLevel = 
- // let toXmlAndWrap = tokenToXml >> (wrapXml "term")
   let innerXml, leftOverTokens =
     match tokens.Head with
     | IntConstant i -> indent (nestingLevel + 1) (tokenToXml tokens.Head), tokens.Tail
@@ -139,20 +127,16 @@ let rec CompileTerm (tokens: Token list) nestingLevel =
     | Identifier i when tokens.Tail = [] -> indent (nestingLevel + 1 ) (tokenToXml tokens.Head), []
     | Identifier i when tokens.Tail.Head = (Symbol '[') ->
       let varNameXml = tokenToXml tokens.Head
-      let leftBracketXml = tokenToXml tokens.Tail.Head
-      let expressionTokens, remainingTokens = advanceUntil (fun x -> x = (Symbol ']')) tokens.Tail.Tail false
+      let expressionTokens, remainingTokens = advanceUntilMatchingBracket (Symbol '[') (Symbol ']') tokens.Tail false
       let expressionXml = CompileExpression expressionTokens (nestingLevel + 1)
-      let rightBracketXml = tokenToXml remainingTokens.Head
       $$"""{{indent (nestingLevel + 1) varNameXml}}
-{{indent (nestingLevel + 1) leftBracketXml}}
+{{indent (nestingLevel + 1) (tokenToXml (Symbol '['))}}
 {{expressionXml}}
-{{indent (nestingLevel + 1) rightBracketXml}}""", remainingTokens.Tail
+{{indent (nestingLevel + 1) (tokenToXml (Symbol ']'))}}""", remainingTokens
     | Identifier i when tokens.Tail.Head = (Symbol '(') ->
       let subroutineName, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
-      let tokens = eatIf (isSameToken (Symbol '(')) tokens
-      let expressionListTokens, tokens = advanceUntil (fun x -> x = (Symbol ')')) tokens false
+      let expressionListTokens, tokens = advanceUntilMatchingBracket (Symbol '(') (Symbol ')') tokens false
       let expressionListXml, count = CompileExpressionList expressionListTokens (nestingLevel + 1)
-      let tokens = eatIf (isSameToken (Symbol ')')) tokens
       $$"""{{indent (nestingLevel + 1) (tokenToXml subroutineName)}}
 {{indent (nestingLevel + 1) (tokenToXml (Symbol '('))}}
 {{expressionListXml}}
@@ -161,10 +145,8 @@ let rec CompileTerm (tokens: Token list) nestingLevel =
       let classOrVarName, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
       let tokens = eatIf (isSameToken (Symbol '.')) tokens
       let subroutineName, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
-      let tokens = eatIf (isSameToken (Symbol '(')) tokens
-      let expressionListTokens, tokens = advanceUntil (fun x -> x = (Symbol ')')) tokens false
+      let expressionListTokens, tokens = advanceUntilMatchingBracket (Symbol '(') (Symbol ')') tokens false
       let expressionListXml, count = CompileExpressionList expressionListTokens (nestingLevel + 1)
-      let tokens = eatIf (isSameToken (Symbol ')')) tokens
       $$"""{{indent (nestingLevel + 1) (tokenToXml classOrVarName)}}
 {{indent (nestingLevel + 1) (tokenToXml (Symbol '.'))}}
 {{indent (nestingLevel + 1) (tokenToXml subroutineName)}}
@@ -210,17 +192,16 @@ and CompileExpressionList tokens nestingLevel =
 let CompileLetStatement tokens nestingLevel = 
   let tokens = eatIf (isSameToken (Keyword "let")) tokens
   let varName, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
-  let maybeLeftSquareBracket, tokens = maybeGetNextTokenIf (isSameToken (Symbol '[')) tokens
-  let arrayIndexExpressionXml , tokens =
-    match maybeLeftSquareBracket with
-    | Some t -> let expressionTokens, tokens = advanceUntil (fun x -> x = (Symbol ']')) tokens false
-                let expressionXml = CompileExpression expressionTokens 0
-                let tokens = eatIf (isSameToken (Symbol ']')) tokens
-                ($$"""
+  let arrayIndexExpressionXml, tokens = 
+    match tokens.Head with
+    | Symbol s when s = '[' -> 
+      let expressionTokens, tokens = advanceUntilMatchingBracket (Symbol '[') (Symbol ']') tokens false
+      let expressionXml = CompileExpression expressionTokens 0
+      ($$"""
 {{indent (nestingLevel + 1) "<symbol> [ </symbol>"}}
 {{indent (nestingLevel + 1) expressionXml}}
 {{indent (nestingLevel + 1) "<symbol> ] </symbol>"}} """), tokens
-    | None -> ("", tokens)
+    | Symbol s when s = '=' -> "", tokens
   let tokens = eatIf (isSameToken (Symbol '=')) tokens
   let rhsExpressionTokens, remainingTokens = advanceUntil (fun x -> x = (Symbol ';')) tokens false
   let rhsExpressionXml = CompileExpression rhsExpressionTokens 0
@@ -410,25 +391,6 @@ let CompileSubroutineBody (tokens: Token list) =
 {{indent 1 statementsXml}}
 {{indent 1 "<symbol> } </symbol>"}}
 </subroutineBody"""
-  (*let varDecPatterns, tokens = getConsecutivePatterns (fun x -> x = (Keyword "var")) (fun x -> x = (Symbol ';')) tokens
-  let compileVarDec varDecTokens =
-    let varDecTokens = eatIf (isSameToken (Keyword "var")) varDecTokens
-    let typ, varDecTokens = getTokenIf isTypeProgramStructure varDecTokens
-    let varName, varDecTokens = getTokenIf (isSameType (Identifier "_")) varDecTokens
-    let handleCommaThenVarName expectingComma ts xml
-      match ts with
-      | head::tail when head = (Symbol ';') -> xml
-      | head::tail when head = (Symbol ',') && expectingComma -> handleCommaThenVarName false tail (xml + "\n" + (tokenToXml head))
-      | head::tail when ((isSameType (Identifier "_")) ts) && not expectingComma -> handleCommaThenVarName true tail (xml + "\n" + (tokenToXml head))
-      | head::tail -> failwith ("Unexpected token in CompileSubroutineBody: " + (string head))
-    let commaAndVarXml = handleCommaThenVarName true varDecTokens ""
-    $$"""{{tokenToXml (Keyword "var")}}
-{{tokenToXml type}}
-{{tokenToXml varName}}
-{{commaAndVarXml}}"""
-  varDecPatterns |> List.map*)
-  
-
     
 
 let CompileSubroutineDecs tokens =
