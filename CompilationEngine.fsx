@@ -1,10 +1,15 @@
 //module CompilationEngine
-//open Tokenizer
 #load "Tokenizer.fs"
+#load "SymbolTable.fs"
 open Tokenizer
 
 let SPACES_PER_INDENT = 2
 
+//module Identifier =
+type Category = Class | Subroutine | InTable
+type Role = Declaration | Use
+
+//open Identifier
 
 let indent nestingLevel (string: string) = 
   let spaces = String.replicate (nestingLevel * SPACES_PER_INDENT) " "
@@ -59,6 +64,7 @@ let eatIf (test: Token list -> bool) (tokens: Token list) =
 
 let getNextTokenIf test tokens = 
   match tokens with
+  | [] -> failwith "No tokens found"
   | head::tail when (test tokens) -> head, tail
   | head::tail -> failwith ("Bad Argument " + (string head)) 
 
@@ -108,7 +114,33 @@ let isOp token =
 let getTokensBeforeOp tokens = 
   advanceUntil (fun x -> isOp x) tokens false
 
-let rec CompileTerm (tokens: Token list) nestingLevel = 
+
+
+let identifierToXml identifier category role symbolTable = 
+  let name = 
+    match identifier with
+    | Identifier i -> i
+    | _ -> failwith ("Wrong token passed to identifierToXml: " + (string identifier))
+  let cat = 
+    match category with
+    | Class | Subroutine -> string category
+    | InTable -> string (SymbolTable.kindOf name symbolTable)
+  let index = 
+    match category with
+    | Class | Subroutine -> "None"
+    | InTable -> string (SymbolTable.indexOf name symbolTable)
+  let nameXml = $$"""<name> {{name}} </name>"""
+  let categoryXml = $$"""<category> {{cat}} </category>"""
+  let roleXml = $$"""<role> {{role}} </role>"""
+  let indexXml = $$"""<index> {{index}} </index>"""
+  $$"""<identifier>
+{{indent 1 nameXml}}
+{{indent 1 categoryXml}}
+{{indent 1 roleXml}}
+{{indent 1 indexXml}}
+</identifier>"""
+
+let rec CompileTerm (tokens: Token list) nestingLevel symbolTable = 
   let innerXml, leftOverTokens =
     match tokens.Head with
     | IntConstant i -> indent (nestingLevel + 1) (tokenToXml tokens.Head), tokens.Tail
@@ -116,51 +148,57 @@ let rec CompileTerm (tokens: Token list) nestingLevel =
     | Keyword k when (List.contains k ["true"; "false"; "null"; "this"]) -> indent (nestingLevel + 1) (tokenToXml tokens.Head), tokens.Tail
     | Symbol s when s = '(' -> 
       let expressionTokens, remainingTokens = advanceUntilMatchingBracket (Symbol '(') (Symbol ')') tokens false 
-      let expressionXml = CompileExpression expressionTokens (nestingLevel + 1)
+      let expressionXml = CompileExpression expressionTokens (nestingLevel + 1) symbolTable
       let termXml = $$"""{{indent (nestingLevel + 1) (tokenToXml (Symbol '('))}}
 {{expressionXml}}
 {{indent (nestingLevel + 1) (tokenToXml (Symbol ')'))}}"""
-      termXml, remainingTokens       
+      termXml, remainingTokens      
     | Symbol s when (s = '-' || s = '~') -> 
       let unaryOpXml = tokenToXml tokens.Head
-      let termXml, remainingTokens = CompileTerm tokens.Tail (nestingLevel + 1)
+      let termXml, remainingTokens = CompileTerm tokens.Tail (nestingLevel + 1) symbolTable
       (unaryOpXml + "\n" + termXml), remainingTokens
-    | Identifier i when tokens.Tail = [] -> indent (nestingLevel + 1 ) (tokenToXml tokens.Head), []
+    | Identifier i when tokens.Tail = [] -> indent (nestingLevel + 1 ) (identifierToXml tokens.Head InTable Use symbolTable), []
     | Identifier i when tokens.Tail.Head = (Symbol '[') ->
-      let varNameXml = tokenToXml tokens.Head
+      let varNameXml = identifierToXml tokens.Head InTable Use symbolTable
       let expressionTokens, remainingTokens = advanceUntilMatchingBracket (Symbol '[') (Symbol ']') tokens.Tail false
-      let expressionXml = CompileExpression expressionTokens (nestingLevel + 1)
+      let expressionXml = CompileExpression expressionTokens (nestingLevel + 1) symbolTable
       $$"""{{indent (nestingLevel + 1) varNameXml}}
 {{indent (nestingLevel + 1) (tokenToXml (Symbol '['))}}
 {{expressionXml}}
 {{indent (nestingLevel + 1) (tokenToXml (Symbol ']'))}}""", remainingTokens
     | Identifier i when tokens.Tail.Head = (Symbol '(') ->
-      let subroutineName, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
+      let subroutineNameToken, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
+      let subroutineNameXml = identifierToXml subroutineNameToken Subroutine Use symbolTable
       let expressionListTokens, tokens = advanceUntilMatchingBracket (Symbol '(') (Symbol ')') tokens false
-      let expressionListXml, count = CompileExpressionList expressionListTokens (nestingLevel + 1)
-      $$"""{{indent (nestingLevel + 1) (tokenToXml subroutineName)}}
+      let expressionListXml, count = CompileExpressionList expressionListTokens (nestingLevel + 1) symbolTable
+      $$"""{{indent (nestingLevel + 1) subroutineNameXml}}
 {{indent (nestingLevel + 1) (tokenToXml (Symbol '('))}}
 {{expressionListXml}}
 {{indent (nestingLevel + 1) (tokenToXml (Symbol ')'))}}""", tokens
     | Identifier i when tokens.Tail.Head = (Symbol '.') ->
-      let classOrVarName, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
+      let classOrVarNameToken, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
+      let classOrVarNameXml = 
+        match (SymbolTable.kindOf i symbolTable) with
+        | SymbolTable.None -> identifierToXml classOrVarNameToken Class Use symbolTable
+        | _ -> identifierToXml classOrVarNameToken InTable Use symbolTable
       let tokens = eatIf (isSameToken (Symbol '.')) tokens
-      let subroutineName, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
+      let subroutineNameToken, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
+      let subroutineNameXml = identifierToXml subroutineNameToken Subroutine Use symbolTable
       let expressionListTokens, tokens = advanceUntilMatchingBracket (Symbol '(') (Symbol ')') tokens false
-      let expressionListXml, count = CompileExpressionList expressionListTokens (nestingLevel + 1)
-      $$"""{{indent (nestingLevel + 1) (tokenToXml classOrVarName)}}
+      let expressionListXml, count = CompileExpressionList expressionListTokens (nestingLevel + 1) symbolTable
+      $$"""{{indent (nestingLevel + 1) classOrVarNameXml}}
 {{indent (nestingLevel + 1) (tokenToXml (Symbol '.'))}}
-{{indent (nestingLevel + 1) (tokenToXml subroutineName)}}
+{{indent (nestingLevel + 1) subroutineNameXml}}
 {{indent (nestingLevel + 1) (tokenToXml (Symbol '('))}}
 {{expressionListXml}}
-{{indent (nestingLevel + 1) (tokenToXml (Symbol ')'))}}""", tokens
+{{indent (nestingLevel + 1) (tokenToXml (Symbol ')'))}}""", tokens  
     | Identifier i -> indent (nestingLevel + 1) (tokenToXml tokens.Head), tokens.Tail
     | _ -> failwith ("Unexpected token found in CompileTerm: " + (string tokens.Head))
   (indent nestingLevel "<term>") + "\n" + innerXml + "\n" + (indent nestingLevel "</term>"), leftOverTokens
   
 
-and CompileExpression tokens nestingLevel =
-  let rec aux expectingTerm remainingTokens xml =
+and CompileExpression tokens nestingLevel symbolTable =
+  let rec aux expectingTerm remainingTokens xml  =
     match remainingTokens with 
     | [] -> $$"""{{indent nestingLevel "<expression>"}}
 {{xml}}
@@ -170,26 +208,27 @@ and CompileExpression tokens nestingLevel =
       | _ when (isOp head) -> aux true tail (xml + "\n" + (indent (nestingLevel + 1) (tokenToXml head)) + "\n")
       | _ -> failwith ("Unexpected token when expected op in expression: " + (string head))
     | head::tail -> 
-      let termXml, remainingTokens = CompileTerm remainingTokens (nestingLevel + 1)
-      aux false remainingTokens (xml + termXml)
-  let xml = aux true tokens ""
+      let termXml, remainingTokens = CompileTerm remainingTokens (nestingLevel + 1) symbolTable
+      aux false remainingTokens (xml + termXml) 
+  let xml = aux true tokens "" 
   indent nestingLevel xml
 
-and CompileExpressionList tokens nestingLevel = 
+and CompileExpressionList tokens nestingLevel symbolTable = 
   let rec aux remainingTokens xml count expectingExpression =
     match remainingTokens with
     | [] -> $$"""{{indent nestingLevel "<expressionList>"}} 
 {{xml}}{{indent nestingLevel "</expressionList>"}}""", count
     | head::tail when expectingExpression ->
       let currentExpressionTokens, remainingTokens = advanceUntil (fun x -> x = (Symbol ',')) remainingTokens false
-      let currentExpressionXml =  (indent (nestingLevel + 1) (CompileExpression currentExpressionTokens 0)) + "\n"
+      let currentExpressionXml =  (indent (nestingLevel + 1) (CompileExpression currentExpressionTokens 0 symbolTable)) + "\n"
       aux remainingTokens (xml + currentExpressionXml) (count + 1) false
     | head::tail when not expectingExpression ->
       let comma, remainingTokens = getNextTokenIf (isSameToken (Symbol ',')) remainingTokens
       aux remainingTokens (xml + (indent (nestingLevel + 1) (tokenToXml comma)) + "\n") count true
+    | head::tail -> failwith ("Unexpected input to expressionList" + (string head))
   let xml, count = aux tokens "" 0 true
-  xml, count
-
+  xml, count 
+(*
 let CompileLetStatement tokens nestingLevel = 
   let tokens = eatIf (isSameToken (Keyword "let")) tokens
   let varName, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
@@ -203,6 +242,7 @@ let CompileLetStatement tokens nestingLevel =
 {{indent (nestingLevel + 1) expressionXml}}
 {{indent (nestingLevel + 1) "<symbol> ] </symbol>"}} """), tokens
     | Symbol s when s = '=' -> "", tokens
+    | _ -> failwith ("Unexpected token found in CompileLetStatement: " + (string tokens.Head))
   let tokens = eatIf (isSameToken (Symbol '=')) tokens
   let rhsExpressionTokens, remainingTokens = advanceUntil (fun x -> x = (Symbol ';')) tokens false
   let rhsExpressionXml = CompileExpression rhsExpressionTokens 0
@@ -214,7 +254,7 @@ let CompileLetStatement tokens nestingLevel =
 {{indent (nestingLevel + 1) rhsExpressionXml}}
 {{indent (nestingLevel + 1) (tokenToXml (Symbol ';'))}}
 {{indent nestingLevel "</letStatement>"}}""", remainingTokens
-
+    
 let CompileDoStatement tokens nestingLevel =
   let tokens = eatIf (isSameToken (Keyword "do")) tokens
   let subroutineCallTokens, tokens = advanceUntil (fun x -> x = (Symbol ';')) tokens false
@@ -347,7 +387,7 @@ let CompileClassVarDecs tokens =
     let varName, listOfTokens = getNextTokenIf  (isSameType (Identifier "_")) listOfTokens
     let otherVarsXml = listOfTokens |> List.map tokenToXml
                                     |> List.reduce (fun x y -> x + "\n" + y)
-    $$"""<classVarDec>"
+    $$"""<classVarDec>
 {{indent 1 (tokenToXml staticOrField)}}
 {{indent 1 (tokenToXml typ)}}
 {{indent 1 (tokenToXml varName)}}
@@ -391,7 +431,7 @@ let CompileSubroutineBody (tokens: Token list) =
 {{indent 1 "<symbol> { </symbol>"}}{{indent 1 varDecsXml}}
 {{indent 1 statementsXml}}
 {{indent 1 "<symbol> } </symbol>"}}
-</subroutineBody"""
+</subroutineBody>"""
     
 
 let CompileSubroutineDecs tokens =
@@ -413,14 +453,13 @@ let CompileSubroutineDecs tokens =
 {{indent 1 parameterXml}}
 {{indent 1 "<symbol> ) </symbol>"}}
 {{indent 1  subroutineBodyXml}}
-</subroutineDec>
-"""
+</subroutineDec>"""
       , ts
   let rec aux remainingTokens xml =
     match remainingTokens with
     | head::tail when head = Keyword "constructor" || head = Keyword "function" || head = Keyword "method" -> 
       let oneDecXml, remainingTokens = doOneSubroutineDec remainingTokens
-      let xml = xml + oneDecXml
+      let xml = xml + "\n" + oneDecXml
       aux remainingTokens xml
     | _ -> xml, remainingTokens
   aux tokens ""
@@ -437,12 +476,11 @@ let CompileClass tokens =
 {{indent 1 "<keyword> class </keyword>"}}
 {{indent 1 (tokenToXml className)}}
 {{indent 1 "<symbol> { </symbol>"}}
-{{indent 2 classVarDecs}}
-{{indent 2 classSubroutineDecs}}
+{{indent 2 classVarDecs}}{{indent 2 classSubroutineDecs}}
 {{indent 1 "<symbol> } </symbol>"}}
 </class>
 """
-
+*)
 let classTokens = [
   Keyword "class";
   Identifier "Main";
@@ -593,6 +631,17 @@ let expressionListTest = [IntConstant 4; Symbol '+'; IntConstant 2; Symbol ','; 
 let classTest = List.concat [[Keyword "class"; Identifier "Point"; Symbol '{'] ; classVarDecsTest; subroutineDecsTest; [Symbol '}']]
 
 let emptyBracketsTest = [Symbol '{'; Symbol '}']
+let st = SymbolTable.add "foo" "string" SymbolTable.Var (SymbolTable.create())
+printfn "%A" (identifierToXml (Identifier "foo") InTable Use st)
+printfn ""
+printfn "%A" (CompileTerm [Identifier "foo"] 0 st)
+printfn ""
+printfn "%A" (CompileTerm [Identifier "foo"; Symbol '['; IntConstant 5; Symbol ']'] 0 st)
+printfn ""
+printfn "%A" (CompileTerm [Identifier "bar"; Symbol '('; IntConstant 3; Symbol ')'] 0 st)
+printfn ""
+printfn "%A" (CompileTerm [Identifier "foo"; Symbol '.'; Identifier "FunkName"; Symbol '('; IntConstant 3; Symbol ','; StringConstant "slop"; Symbol ')'] 0 st)
+(*
 printfn "%A" (CompileClass classTest)
 printfn ""
 printfn "%A" (CompileSubroutineDecs subroutineDecsTest)
@@ -670,3 +719,4 @@ printfn "%A" (CompileReturnStatement [Keyword "return"; Symbol ';'] 1)
 //printfn "%A" (getNextTokenIf (isSameType (Keyword "_")) testTokens)
 //printfn "%A" (advanceUntil (fun x -> x = (Symbol ';')) testTokens true)
 //printfn "%A" (getConsecutivePatterns (fun x -> x = (Keyword "var")) (fun x -> x = (Symbol ';')) testTokens)
+*)

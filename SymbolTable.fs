@@ -1,8 +1,11 @@
+module SymbolTable
+
 type Kind = 
   | Static
   | Field
   | Arg
   | Var
+  | None
   
 type SymbolInfo =
   { T: string; Kind: Kind; Index: int}
@@ -26,7 +29,7 @@ let varCount kind st =
   |> Map.filter (fun _ v -> v.Kind = kind)
   |> Map.count
 
-let define name t kind st =
+let add name t kind st =
   let nOfKind = varCount kind st
   match kind with
   | Static | Field -> {st with ClassSymbols = (Map.add name {T = t; Kind = kind; Index = nOfKind} st.ClassSymbols)}
@@ -35,35 +38,38 @@ let define name t kind st =
 let wipeSymbolTable st = 
   {st with SubroutineSymbols = Map.empty}
 
-let fOf name f st = 
+let functionOf name f st = 
   match name with
   | _ when st.SubroutineSymbols.ContainsKey name -> (st.SubroutineSymbols[name]) |> f
   | _ when st.ClassSymbols.ContainsKey name -> (st.ClassSymbols[name]) |> f
   | _ -> failwith ("SymbolTable does not contain the key: " + name)
 
 let kindOf name st =
-  fOf name (fun x -> x.Kind) st
+  match name with 
+  | _ when st.SubroutineSymbols.ContainsKey name -> (st.SubroutineSymbols[name]).Kind
+  | _ when st.ClassSymbols.ContainsKey name -> (st.ClassSymbols[name]).Kind
+  | _ -> Kind.None
 
 let typeOf name st = 
-  fOf name (fun x -> x.T) st
+  functionOf name (fun x -> x.T) st
 
 let indexOf name st = 
-  fOf name (fun x -> x.Index) st
-
+  functionOf name (fun x -> x.Index) st
+(*
 let st = create ()
-let st1 = define "foo" "int" Field st
+let st1 = add "foo" "int" Field st
 printfn "%A" st1
 printfn ""
-let st2 = define "bar" "int" Arg st1
+let st2 = add "bar" "int" Arg st1
 printfn "%A" st2
 printfn ""
-let st3 = define "foo2" "string" Arg st2
+let st3 = add "foo2" "string" Arg st2
 printfn "%A" st3
 printfn ""
-let st4 = define "bar2" "Point" Static st3
+let st4 = add "bar2" "Point" Static st3
 printfn "%A" st4
 printfn ""
-let st5 = define "bar3" "Point" Static st4
+let st5 = add "bar3" "Point" Static st4
 printfn "%A" st5
 printfn ""
 let st6 = wipeSymbolTable st5
@@ -81,6 +87,6 @@ printfn "%A" (indexOf "bar2" st5)
 printfn ""
 printfn "%A" (indexOf "bar3" st5)
 printfn ""
-
+*)
 
 
