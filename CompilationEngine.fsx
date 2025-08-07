@@ -188,7 +188,7 @@ let rec CompileTerm (tokens: Token list) nestingLevel symbolTable =
 {{indent (nestingLevel + 1) (tokenToXml (Symbol '('))}}
 {{expressionListXml}}
 {{indent (nestingLevel + 1) (tokenToXml (Symbol ')'))}}""", tokens  
-    | Identifier i -> indent (nestingLevel + 1) (tokenToXml tokens.Head), tokens.Tail
+    | Identifier i -> indent (nestingLevel + 1) (identifierToXml tokens.Head InTable Use symbolTable), tokens.Tail
     | _ -> failwith ("Unexpected token found in CompileTerm: " + (string tokens.Head))
   (indent nestingLevel "<term>") + "\n" + innerXml + "\n" + (indent nestingLevel "</term>"), leftOverTokens
   
