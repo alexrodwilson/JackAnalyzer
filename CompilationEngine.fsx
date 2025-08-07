@@ -277,43 +277,42 @@ let CompileReturnStatement tokens nestingLevel symbolTable =
 {{indent (nestingLevel + 1) "<symbol> ; </symbol>"}}
 {{indent nestingLevel "</returnStatement>"}}""", tokens
 
-(*
-let rec CompileStatements tokens nestingLevel = 
+let rec CompileStatements tokens nestingLevel symbolTable = 
   let rec aux tokens xml =
     match tokens with
     | [] -> xml, tokens
     | head::tail when head = Symbol '}' -> xml, tokens
     | head::tail when head = (Keyword "let") -> 
-      let letStatementXml, tokens = CompileLetStatement tokens 0
+      let letStatementXml, tokens = CompileLetStatement tokens 0 symbolTable
       aux tokens (xml + "\n" + letStatementXml)
     | head::tail when head = (Keyword "do") ->
-      let doStatementXml, tokens = CompileDoStatement tokens 0
+      let doStatementXml, tokens = CompileDoStatement tokens 0 symbolTable
       aux tokens (xml + "\n" + doStatementXml)
     | head::tail when head = (Keyword "return") ->
-      let returnStatementXml, tokens = CompileReturnStatement tokens 0
+      let returnStatementXml, tokens = CompileReturnStatement tokens 0 symbolTable
       aux tokens (xml + "\n" + returnStatementXml)
     | head::tail when head = (Keyword "if") ->
-      let ifStatementXml, tokens = CompileIfStatement tokens 0
+      let ifStatementXml, tokens = CompileIfStatement tokens 0 symbolTable
       aux tokens (xml + "\n" + ifStatementXml)
     | head::tail when head = (Keyword "while") ->
-      let whileStatementXml, tokens = CompileWhileStatement tokens 0
+      let whileStatementXml, tokens = CompileWhileStatement tokens 0 symbolTable
       aux tokens (xml + "\n" + whileStatementXml)
     | head::tail -> failwith ("Unexpected token in CompileStatements" + (string head))
   let statementsXml, remainingTokens = aux tokens ""
   indent nestingLevel $$"""{{indent nestingLevel "<statements>"}}{{indent (nestingLevel + 1) statementsXml}}
 {{indent nestingLevel "</statements>"}}""", remainingTokens
 
-and CompileIfStatement tokens nestingLevel =
+and CompileIfStatement tokens nestingLevel symbolTable =
   let tokens = eatIf (isSameToken (Keyword "if")) tokens
   let expressionTokens, tokens = advanceUntilMatchingBracket (Symbol '(') (Symbol ')') tokens false
-  let expressionXml = CompileExpression expressionTokens 0
+  let expressionXml = CompileExpression expressionTokens 0 symbolTable
   let statementsTokens, tokens = advanceUntilMatchingBracket (Symbol '{') (Symbol '}') tokens false
-  let statementsXml, _ = CompileStatements statementsTokens 0
+  let statementsXml, _ = CompileStatements statementsTokens 0 symbolTable
   match tokens with
   | head::tail when head = (Keyword "else") -> 
     let tokens = eatIf (isSameToken (Keyword "else")) tokens 
     let elseStatementsTokens, tokens =  advanceUntilMatchingBracket (Symbol '{') (Symbol '}') tokens false
-    let elseStatementsXml, _  = CompileStatements elseStatementsTokens 0
+    let elseStatementsXml, _  = CompileStatements elseStatementsTokens 0 symbolTable
     $$"""{{indent nestingLevel "<ifStatement>"}}
 {{indent (nestingLevel + 1) (tokenToXml (Keyword "if"))}}
 {{indent (nestingLevel + 1) (tokenToXml (Symbol '('))}}
@@ -339,12 +338,12 @@ and CompileIfStatement tokens nestingLevel =
 {{indent nestingLevel "</ifStatement>"}}""", tokens
 
 
-and CompileWhileStatement tokens nestingLevel = 
+and CompileWhileStatement tokens nestingLevel symbolTable = 
   let tokens = eatIf (isSameToken (Keyword "while")) tokens
   let expressionTokens, tokens = advanceUntilMatchingBracket (Symbol '(') (Symbol ')') tokens false
   let statementsTokens, tokens = advanceUntilMatchingBracket (Symbol '{') (Symbol '}') tokens false
-  let expressionXml = CompileExpression expressionTokens 0
-  let statementsXml, _ = CompileStatements statementsTokens 0
+  let expressionXml = CompileExpression expressionTokens 0 symbolTable
+  let statementsXml, _ = CompileStatements statementsTokens 0 symbolTable
   $$"""{{indent nestingLevel "<whileStatement>"}}
 {{indent (nestingLevel + 1) (tokenToXml (Keyword "while"))}}
 {{indent (nestingLevel + 1) (tokenToXml (Symbol '('))}}
@@ -356,6 +355,7 @@ and CompileWhileStatement tokens nestingLevel =
 {{indent nestingLevel "</whileStatement>"}}""", tokens
 
 
+(*
 let CompileVarDecs tokens =
   match tokens with
   | [] -> "", []
@@ -610,7 +610,7 @@ let subroutineDecsTest = List.concat[
   Symbol '{';
   Symbol '}']]
 let ifStatementTest = [Keyword "if"; Symbol '('; Symbol '('; IntConstant 1; Symbol '+'; IntConstant 3; Symbol ')'; Symbol '='; 
-  IntConstant 4; Symbol ')'; Symbol '{'; Keyword "do"; Identifier "someFunction"; Symbol '('; StringConstant "dog"; Symbol ')'; Symbol ';'; Symbol '}';
+  IntConstant 4; Symbol ')'; Symbol '{'; Keyword "do"; Identifier "someFunction"; Symbol '('; Identifier "i"; Symbol ')'; Symbol ';'; Symbol '}';
   Keyword "else"; Symbol '{'; Keyword "do"; Identifier "someOtherFunction"; Symbol '('; IntConstant 69; Symbol ')'; Symbol ';'; Symbol '}';
   Identifier "No"; Identifier "Surprises"; Identifier "Please"]
 let ifStatementTest2 = [Keyword "if"; Symbol '('; Symbol '('; IntConstant 1; Symbol '+'; IntConstant 3; Symbol ')'; Symbol '='; 
@@ -630,7 +630,7 @@ let expressionListTest = [IntConstant 4; Symbol '+'; IntConstant 2; Symbol ','; 
 let classTest = List.concat [[Keyword "class"; Identifier "Point"; Symbol '{'] ; classVarDecsTest; subroutineDecsTest; [Symbol '}']]
 
 let emptyBracketsTest = [Symbol '{'; Symbol '}']
-let st = SymbolTable.add "i" "int" SymbolTable.Var (SymbolTable.add "foo" "string" SymbolTable.Var (SymbolTable.create()))
+let st = SymbolTable.add "x" "int" SymbolTable.Arg (SymbolTable.add "i" "int" SymbolTable.Var (SymbolTable.add "foo" "string" SymbolTable.Var (SymbolTable.create())))
 printfn "%A" (identifierToXml (Identifier "foo") InTable Use st)
 printfn ""
 printfn "%A" (CompileTerm [Identifier "foo"] 0 st)
@@ -648,6 +648,17 @@ printfn ""
 printfn "%A" (CompileDoStatement doTest 0 st)
 printfn ""
 printfn "%A" (CompileReturnStatement returnTest 0 st)
+printfn ""
+printfn "%A" (CompileIfStatement ifStatementTest 0 st)
+printfn ""
+printfn "%A" (CompileIfStatement ifStatementTest2 0 st)
+printfn ""
+printfn "%A" (CompileWhileStatement whileStatementTest 0 st)
+printfn ""
+printfn "%A" (CompileStatements statementsTest 0 st)
+
+
+
 
 
 (*
