@@ -5,11 +5,9 @@ open Tokenizer
 
 let SPACES_PER_INDENT = 2
 
-//module Identifier =
 type Category = Class | Subroutine | InTable
-type Role = Declaration | Use
+type Role = Definition | Use
 
-//open Identifier
 
 let indent nestingLevel (string: string) = 
   let spaces = String.replicate (nestingLevel * SPACES_PER_INDENT) " "
@@ -228,33 +226,36 @@ and CompileExpressionList tokens nestingLevel symbolTable =
     | head::tail -> failwith ("Unexpected input to expressionList" + (string head))
   let xml, count = aux tokens "" 0 true
   xml, count 
-(*
-let CompileLetStatement tokens nestingLevel = 
+  
+
+let CompileLetStatement tokens nestingLevel symbolTable = 
   let tokens = eatIf (isSameToken (Keyword "let")) tokens
-  let varName, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
+  let varNameToken, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
+  let varNameXml = identifierToXml varNameToken InTable Definition symbolTable
   let arrayIndexExpressionXml, tokens = 
     match tokens.Head with
     | Symbol s when s = '[' -> 
       let expressionTokens, tokens = advanceUntilMatchingBracket (Symbol '[') (Symbol ']') tokens false
-      let expressionXml = CompileExpression expressionTokens 0
-      ($$"""
+      let expressionXml = CompileExpression expressionTokens 0 symbolTable
+      $$"""
 {{indent (nestingLevel + 1) "<symbol> [ </symbol>"}}
 {{indent (nestingLevel + 1) expressionXml}}
-{{indent (nestingLevel + 1) "<symbol> ] </symbol>"}} """), tokens
+{{indent (nestingLevel + 1) "<symbol> ] </symbol>"}} """, tokens
     | Symbol s when s = '=' -> "", tokens
     | _ -> failwith ("Unexpected token found in CompileLetStatement: " + (string tokens.Head))
   let tokens = eatIf (isSameToken (Symbol '=')) tokens
   let rhsExpressionTokens, remainingTokens = advanceUntil (fun x -> x = (Symbol ';')) tokens false
-  let rhsExpressionXml = CompileExpression rhsExpressionTokens 0
+  let rhsExpressionXml = CompileExpression rhsExpressionTokens 0 symbolTable
   let remainingTokens = eatIf (isSameToken (Symbol ';')) remainingTokens
   $$"""{{indent nestingLevel "<letStatement>"}}
 {{indent (nestingLevel + 1) "<keyword> let </keyword>"}}
-{{indent (nestingLevel + 1) (tokenToXml varName)}}{{arrayIndexExpressionXml}}
+{{indent (nestingLevel + 1) varNameXml}}{{arrayIndexExpressionXml}}
 {{indent (nestingLevel + 1) (tokenToXml (Symbol '='))}}
 {{indent (nestingLevel + 1) rhsExpressionXml}}
 {{indent (nestingLevel + 1) (tokenToXml (Symbol ';'))}}
 {{indent nestingLevel "</letStatement>"}}""", remainingTokens
     
+(*
 let CompileDoStatement tokens nestingLevel =
   let tokens = eatIf (isSameToken (Keyword "do")) tokens
   let subroutineCallTokens, tokens = advanceUntil (fun x -> x = (Symbol ';')) tokens false
@@ -568,7 +569,7 @@ let varDecsTest = [Keyword "var"; Keyword "int"; Identifier "i"; Symbol ','; Ide
   Keyword "var"; Identifier "String"; Identifier "s"; Symbol ';']
 
 let letTest = [Keyword "let"; Identifier "x"; Symbol '='; IntConstant 2; Symbol '+'; IntConstant 3; Symbol ';']
-let letTest2 = [Keyword "let"; Identifier "x"; Symbol '['; IntConstant 5; Symbol '-'; IntConstant 2; Symbol ']'; Symbol '='; StringConstant "dog"; Symbol ';']
+let letTest2 = [Keyword "let"; Identifier "foo"; Symbol '['; IntConstant 5; Symbol '-'; IntConstant 2; Symbol ']'; Symbol '='; StringConstant "dog"; Symbol ';']
 let expressionTest1 = [IntConstant 2]
 let expressionTest2 = [IntConstant 2; Symbol '+'; IntConstant 20]
 //let expressionTest3 = [Identifier "things"; Symbol '['; IntConstant 4; Symbol ']']
@@ -641,6 +642,10 @@ printfn ""
 printfn "%A" (CompileTerm [Identifier "bar"; Symbol '('; IntConstant 3; Symbol ')'] 0 st)
 printfn ""
 printfn "%A" (CompileTerm [Identifier "foo"; Symbol '.'; Identifier "FunkName"; Symbol '('; IntConstant 3; Symbol ','; StringConstant "slop"; Symbol ')'] 0 st)
+printfn ""
+printfn "%A" (CompileTerm [Identifier "notInTableHA"; Symbol '.'; Identifier "FunkName"; Symbol '('; IntConstant 3; Symbol ','; StringConstant "slop"; Symbol ')'] 0 st)
+printfn ""
+printfn "%A" (CompileLetStatement letTest2 0 st)
 (*
 printfn "%A" (CompileClass classTest)
 printfn ""
