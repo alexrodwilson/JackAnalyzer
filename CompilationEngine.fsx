@@ -255,17 +255,17 @@ let CompileLetStatement tokens nestingLevel symbolTable =
 {{indent (nestingLevel + 1) (tokenToXml (Symbol ';'))}}
 {{indent nestingLevel "</letStatement>"}}""", remainingTokens
     
-(*
-let CompileDoStatement tokens nestingLevel =
+let CompileDoStatement tokens nestingLevel symbolTable =
   let tokens = eatIf (isSameToken (Keyword "do")) tokens
   let subroutineCallTokens, tokens = advanceUntil (fun x -> x = (Symbol ';')) tokens false
-  let subroutineCallXml, notNeeded = CompileTerm subroutineCallTokens 0
+  let subroutineCallXml, notNeeded = CompileTerm subroutineCallTokens 0 symbolTable
   let tokens = eatIf (isSameToken (Symbol ';')) tokens
   $$"""{{indent nestingLevel "<doStatement>"}}
 {{indent (nestingLevel + 1) "<keyword> do </keyword>"}}
 {{indent (nestingLevel + 1) subroutineCallXml}}
 {{indent (nestingLevel + 1) "<symbol> ; </symbol>"}}
 {{indent nestingLevel "</doStatement>"}}""", tokens
+(*
 
 let CompileReturnStatement tokens nestingLevel = 
   let tokens = eatIf (isSameToken (Keyword "return")) tokens
@@ -632,7 +632,7 @@ let expressionListTest = [IntConstant 4; Symbol '+'; IntConstant 2; Symbol ','; 
 let classTest = List.concat [[Keyword "class"; Identifier "Point"; Symbol '{'] ; classVarDecsTest; subroutineDecsTest; [Symbol '}']]
 
 let emptyBracketsTest = [Symbol '{'; Symbol '}']
-let st = SymbolTable.add "foo" "string" SymbolTable.Var (SymbolTable.create())
+let st = SymbolTable.add "i" "int" SymbolTable.Var (SymbolTable.add "foo" "string" SymbolTable.Var (SymbolTable.create()))
 printfn "%A" (identifierToXml (Identifier "foo") InTable Use st)
 printfn ""
 printfn "%A" (CompileTerm [Identifier "foo"] 0 st)
@@ -646,6 +646,9 @@ printfn ""
 printfn "%A" (CompileTerm [Identifier "notInTableHA"; Symbol '.'; Identifier "FunkName"; Symbol '('; IntConstant 3; Symbol ','; StringConstant "slop"; Symbol ')'] 0 st)
 printfn ""
 printfn "%A" (CompileLetStatement letTest2 0 st)
+printfn ""
+printfn "%A" (CompileDoStatement doTest 0 st)
+
 (*
 printfn "%A" (CompileClass classTest)
 printfn ""
