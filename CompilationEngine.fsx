@@ -112,8 +112,6 @@ let isOp token =
 let getTokensBeforeOp tokens = 
   advanceUntil (fun x -> isOp x) tokens false
 
-
-
 let identifierToXml identifier category role symbolTable = 
   let name = 
     match identifier with
@@ -265,21 +263,21 @@ let CompileDoStatement tokens nestingLevel symbolTable =
 {{indent (nestingLevel + 1) subroutineCallXml}}
 {{indent (nestingLevel + 1) "<symbol> ; </symbol>"}}
 {{indent nestingLevel "</doStatement>"}}""", tokens
-(*
 
-let CompileReturnStatement tokens nestingLevel = 
+let CompileReturnStatement tokens nestingLevel symbolTable = 
   let tokens = eatIf (isSameToken (Keyword "return")) tokens
   let expressionTokens, tokens = advanceUntil (fun x -> x = (Symbol ';')) tokens false
   let expressionXml =
     match expressionTokens with 
     | [] -> ""
-    | _ -> "\n" + (CompileExpression expressionTokens 0) 
+    | _ -> "\n" + (CompileExpression expressionTokens 0 symbolTable) 
   let tokens = eatIf (isSameToken (Symbol ';')) tokens
   $$"""{{indent nestingLevel "<returnStatement>"}}
 {{indent (nestingLevel + 1) "<keyword> return </keyword>"}}{{indent (nestingLevel + 1) expressionXml}}
 {{indent (nestingLevel + 1) "<symbol> ; </symbol>"}}
 {{indent nestingLevel "</returnStatement>"}}""", tokens
 
+(*
 let rec CompileStatements tokens nestingLevel = 
   let rec aux tokens xml =
     match tokens with
@@ -648,6 +646,9 @@ printfn ""
 printfn "%A" (CompileLetStatement letTest2 0 st)
 printfn ""
 printfn "%A" (CompileDoStatement doTest 0 st)
+printfn ""
+printfn "%A" (CompileReturnStatement returnTest 0 st)
+
 
 (*
 printfn "%A" (CompileClass classTest)
