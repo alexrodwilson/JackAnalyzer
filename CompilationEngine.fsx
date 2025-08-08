@@ -467,19 +467,19 @@ let CompileParameterList tokens symbolTable =
   match tokens with 
   | [] -> """<parameterList></parameterList>"""
   | _ -> aux tokens 0 ""
-(*        
-let CompileSubroutineBody (tokens: Token list) = 
+        
+let CompileSubroutineBody (tokens: Token list) symbolTable = 
   let tokens = eatIf (isSameToken (Symbol '{')) tokens
-  let varDecsXml, tokens = CompileVarDecs tokens
-  let statementsXml, tokens = CompileStatements tokens 0
+  let varDecsXml, tokens, symbolTable = CompileVarDecs tokens symbolTable
+  let statementsXml, tokens = CompileStatements tokens 0 symbolTable
   let tokens = eatIf (isSameToken (Symbol '}')) tokens
   $$"""<subroutineBody>
 {{indent 1 "<symbol> { </symbol>"}}{{indent 1 varDecsXml}}
 {{indent 1 statementsXml}}
 {{indent 1 "<symbol> } </symbol>"}}
-</subroutineBody>"""
+</subroutineBody>""", symbolTable
     
-
+(*
 let CompileSubroutineDecs tokens =
   let doOneSubroutineDec tokens =
     let constructorFunctionMethod, ts = getNextTokenIf (isOneOfTokens [Keyword "constructor"; Keyword "function"; Keyword "method"]) tokens
@@ -711,7 +711,8 @@ printfn ""
 printfn "%A" (CompileClassVarDecs classVarDecsTest st)
 printfn ""
 printfn "%A" (CompileParameterList paramTest st)
-
+printfn ""
+printfn "%A" (CompileSubroutineBody subroutineBodyTest st)
 
 
 
