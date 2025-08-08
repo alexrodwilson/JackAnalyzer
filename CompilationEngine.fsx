@@ -442,8 +442,8 @@ let CompileClassVarDecs tokens symbolTable =
               |> List.reduce (fun x y -> x + "\n" + y) 
     xml, remainingTokens, mutSymbolTable
 
-(*
-let CompileParameterList tokens =
+
+let CompileParameterList tokens symbolTable =
   let rec aux tokens count xml = 
     match tokens with
     | [] -> 
@@ -454,15 +454,20 @@ let CompileParameterList tokens =
     | head::tail when head = Symbol ',' -> aux tail count (xml + "\n" + (tokenToXml head) + "\n")
                                            
     | head::tail -> 
-      let typ, tokens = getNextTokenIf isTypeProgramStructure tokens
-      let varName, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
-      let newXml = $$"""{{tokenToXml typ}}
-{{tokenToXml varName}}"""
+      let typeToken, tokens = getNextTokenIf isTypeProgramStructure tokens
+      let varNameToken, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
+      let typeXml = 
+        match typeToken with
+        | Keyword _ -> tokenToXml typeToken
+        | Identifier i -> identifierToXml typeToken Class Use symbolTable
+      let varNameXml = identifierToXml varNameToken InTable Use symbolTable
+      let newXml = $$"""{{typeXml}}
+{{varNameXml}}"""
       aux tokens (count + 1) (xml + newXml)
   match tokens with 
-  | [] -> """<parameterList> </parameterList>"""
+  | [] -> """<parameterList></parameterList>"""
   | _ -> aux tokens 0 ""
-        
+(*        
 let CompileSubroutineBody (tokens: Token list) = 
   let tokens = eatIf (isSameToken (Symbol '{')) tokens
   let varDecsXml, tokens = CompileVarDecs tokens
@@ -672,7 +677,7 @@ let expressionListTest = [IntConstant 4; Symbol '+'; IntConstant 2; Symbol ','; 
 let classTest = List.concat [[Keyword "class"; Identifier "Point"; Symbol '{'] ; classVarDecsTest; subroutineDecsTest; [Symbol '}']]
 
 let emptyBracketsTest = [Symbol '{'; Symbol '}']
-let st = SymbolTable.add "x" "int" SymbolTable.Arg (SymbolTable.add "i" "int" SymbolTable.Var (SymbolTable.add "foo" "string" SymbolTable.Var (SymbolTable.create())))
+let st = SymbolTable.add "b" "boolean" SymbolTable.Arg (SymbolTable.add "p" "Point" SymbolTable.Arg (SymbolTable.add "x" "int" SymbolTable.Arg (SymbolTable.add "i" "int" SymbolTable.Var (SymbolTable.add "foo" "string" SymbolTable.Var (SymbolTable.create())))))
 printfn "%A" (identifierToXml (Identifier "foo") InTable Use st)
 printfn ""
 printfn "%A" (CompileTerm [Identifier "foo"] 0 st)
@@ -704,7 +709,8 @@ printfn ""
 printfn "%A" (CompileVarDecs varDecsTest st)
 printfn ""
 printfn "%A" (CompileClassVarDecs classVarDecsTest st)
-
+printfn ""
+printfn "%A" (CompileParameterList paramTest st)
 
 
 
