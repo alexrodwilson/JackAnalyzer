@@ -355,30 +355,81 @@ and CompileWhileStatement tokens nestingLevel symbolTable =
 {{indent nestingLevel "</whileStatement>"}}""", tokens
 
 
-(*
-let CompileVarDecs tokens =
+//let CompileVarDecs2 tokens symbolTable =
+//  match tokens with
+//  | [] -> "", []
+//  | head::tail when head = Symbol '{' && tokens.Tail.Head = Symbol '}' -> "", []
+//  | head::tail when head = Symbol '}' && tail = [] -> "", tokens
+//  | _ -> 
+//    let patterns, remainingTokens = getConsecutivePatterns (fun x -> x = (Keyword "var")) (fun x -> x = (Symbol ';')) tokens
+//    let compileOne tokens = 
+//      let tokens = eatIf (isSameToken (Keyword "var")) tokens
+//      let typeToken, tokens = getNextTokenIf isTypeProgramStructure tokens
+//      let typeXml, typeName = 
+//        match typeToken with
+//        | Keyword k -> (tokenToXml typeToken), k
+//        | Identifier i -> (identifierToXml typeToken Class Definition symbolTable), i
+//      let varNameToken, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
+//      let varName = match varNameToken with Identifier i -> i
+//      let symbolTable = SymbolTable.add varName typeName SymbolTable.Var symbolTable
+//      let varNameXml = identifierToXml varNameToken InTable Definition symbolTable
+//      let otherVarsXml =  tokens |> List.map tokenToXml
+//                                 |> List.fold (fun x y -> x + "\n" + y) ""
+//      $$"""<varDec>
+//{{indent 1 "<keyword> var </keyword>"}}
+//{{indent 1  typeXml}} 
+//{{indent 1 varNameXml}}{{indent 1 otherVarsXml}} 
+//</varDec>"""
+//    patterns |> List.map  compileOne
+//             |> List.fold (fun x y -> x + "\n" + y) "", remainingTokens, symbolTable
+
+let CompileVarDecs tokens symbolTable =
+  let mutable mutSymbolTable = symbolTable
   match tokens with
-  | [] -> "", []
-  | head::tail when head = Symbol '{' && tokens.Tail.Head = Symbol '}' -> "", []
-  | head::tail when head = Symbol '}' && tail = [] -> "", tokens
+  | [] -> "", [], symbolTable
+  | head::tail when head = Symbol '{' && tokens.Tail.Head = Symbol '}' -> "", [], symbolTable
+  | head::tail when head = Symbol '}' && tail = [] -> "", tokens, symbolTable
   | _ -> 
     let patterns, remainingTokens = getConsecutivePatterns (fun x -> x = (Keyword "var")) (fun x -> x = (Symbol ';')) tokens
     let compileOne tokens = 
       let tokens = eatIf (isSameToken (Keyword "var")) tokens
-      let typ, tokens = getNextTokenIf isTypeProgramStructure tokens
-      let varName, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
-      let otherVarsXml =  tokens |> List.map tokenToXml
-                                 |> List.fold (fun x y -> x + "\n" + y) ""
+      let typeToken, tokens = getNextTokenIf isTypeProgramStructure tokens
+      let typeXml, typeName = 
+        match typeToken with
+        | Keyword k -> (tokenToXml typeToken), k
+        | Identifier i -> (identifierToXml typeToken Class Use mutSymbolTable), i
+      let varNameToken, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
+      let varName = 
+        match varNameToken with 
+        | Identifier i -> i
+        | _ -> failwith ("WrongToken when variable name expected: " + (string varNameToken))
+      mutSymbolTable <- SymbolTable.add varName typeName SymbolTable.Var mutSymbolTable
+      let identifierTokens = tokens |> List.filter (fun x -> match x with
+                                                             | Identifier _ -> true
+                                                             | _ -> false)
+      for token in identifierTokens do
+        let name = match token with | Identifier i -> i | _ -> failwith ("WrongToken when expecting only identifiers: " + (string token))
+        mutSymbolTable <- SymbolTable.add name typeName SymbolTable.Var mutSymbolTable
+      let varNameXml = identifierToXml varNameToken InTable Definition mutSymbolTable
+      let otherVarsXml =  
+        tokens 
+        |> List.map (fun x -> match x with
+                              | Identifier _ -> identifierToXml x InTable Definition mutSymbolTable
+                              | _ -> tokenToXml x)
+        |> List.fold (fun x y -> x + "\n" + y) ""
       $$"""<varDec>
 {{indent 1 "<keyword> var </keyword>"}}
-{{indent 1 (tokenToXml typ)}} 
-{{indent 1 (tokenToXml varName)}}{{indent 1 otherVarsXml}} 
+{{indent 1  typeXml}}
+{{indent 1 varNameXml}}{{indent 1 otherVarsXml}} 
 </varDec>"""
-    patterns |> List.map  compileOne
-             |> List.fold (fun x y -> x + "\n" + y) "", remainingTokens
+    
+     // let symbolTable = mutSymbolTable
+    patterns |> List.map compileOne
+             |> List.fold (fun x y -> x + "\n" + y) "", remainingTokens, mutSymbolTable
 
 
-let CompileClassVarDecs tokens = 
+
+(*let CompileClassVarDecs tokens = 
   let classVarDecPatterns, remainingTokens = getConsecutivePatterns (fun x -> x = (Keyword "static") || x = (Keyword "field")) (fun x -> x = (Symbol ';')) tokens
   let doOneDec listOfTokens =
     let staticOrField, listOfTokens = getNextTokenIf (isOneOfTokens [(Keyword "static"); (Keyword "field")]) listOfTokens 
@@ -565,7 +616,7 @@ let paramTest1 = []
 
 let varDecsTest = [Keyword "var"; Keyword "int"; Identifier "i"; Symbol ','; Identifier "j"; Symbol ';'; 
   Keyword "var"; Identifier "String"; Identifier "s"; Symbol ';']
-
+let varDecsTest2 = [Keyword "var"; Keyword "int"; Identifier "i"; Symbol ','; Identifier "j"; Symbol ';']
 let letTest = [Keyword "let"; Identifier "x"; Symbol '='; IntConstant 2; Symbol '+'; IntConstant 3; Symbol ';']
 let letTest2 = [Keyword "let"; Identifier "foo"; Symbol '['; IntConstant 5; Symbol '-'; IntConstant 2; Symbol ']'; Symbol '='; StringConstant "dog"; Symbol ';']
 let expressionTest1 = [IntConstant 2]
@@ -656,6 +707,12 @@ printfn ""
 printfn "%A" (CompileWhileStatement whileStatementTest 0 st)
 printfn ""
 printfn "%A" (CompileStatements statementsTest 0 st)
+printfn ""
+printfn "%A" (CompileVarDecs varDecsTest2 (SymbolTable.create())) 
+printfn ""
+printfn "%A" (CompileVarDecs varDecsTest st)
+printfn ""
+printfn "%A" st
 
 
 

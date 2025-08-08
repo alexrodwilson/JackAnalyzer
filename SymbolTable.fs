@@ -29,11 +29,19 @@ let varCount kind st =
   |> Map.filter (fun _ v -> v.Kind = kind)
   |> Map.count
 
+let kindHasNameAlready name kind st =
+  match kind with 
+  | Static | Field -> st.ClassSymbols.ContainsKey name
+  | Arg | Var -> st.SubroutineSymbols.ContainsKey name
+
 let add name t kind st =
-  let nOfKind = varCount kind st
+  let i = 
+    match (kindHasNameAlready name kind st) with
+    | true -> (varCount kind st) - 1
+    | false -> varCount kind st
   match kind with
-  | Static | Field -> {st with ClassSymbols = (Map.add name {T = t; Kind = kind; Index = nOfKind} st.ClassSymbols)}
-  | Arg | Var -> {st with SubroutineSymbols = (Map.add name {T = t; Kind = kind; Index = nOfKind} st.SubroutineSymbols)}
+  | Static | Field -> {st with ClassSymbols = (Map.add name {T = t; Kind = kind; Index = i} st.ClassSymbols)}
+  | Arg | Var -> {st with SubroutineSymbols = (Map.add name {T = t; Kind = kind; Index = i} st.SubroutineSymbols)}
 
 let wipeSymbolTable st = 
   {st with SubroutineSymbols = Map.empty}
@@ -42,7 +50,7 @@ let functionOf name f st =
   match name with
   | _ when st.SubroutineSymbols.ContainsKey name -> (st.SubroutineSymbols[name]) |> f
   | _ when st.ClassSymbols.ContainsKey name -> (st.ClassSymbols[name]) |> f
-  | _ -> failwith ("SymbolTable does not contain the key: " + name)
+  | _ -> failwith ("SymbolTable does not contain the mkey: " + name)
 
 let kindOf name st =
   match name with 
