@@ -516,13 +516,14 @@ let CompileSubroutineDecs tokens symbolTable =
     | _ -> xml, remainingTokens, symbolTable
   aux tokens "" symbolTable
 
-(*
-let CompileClass tokens = 
+
+let CompileClass tokens =
+ let symbolTable = SymbolTable.create()
  let tokens = eatIf (isSameToken (Keyword "class")) tokens
  let className, tokens = getNextTokenIf ((isSameType (Identifier "_"))) tokens
  let tokens = eatIf (isSameToken (Symbol '{')) tokens
- let classVarDecs, tokens = CompileClassVarDecs tokens
- let classSubroutineDecs, tokens = CompileSubroutineDecs tokens
+ let classVarDecs, tokens, symbolTable = CompileClassVarDecs tokens symbolTable
+ let classSubroutineDecs, tokens, symbolTable = CompileSubroutineDecs tokens symbolTable
  let tokens = eatIf (isSameToken (Symbol '}')) tokens
  $$"""<class>
 {{indent 1 "<keyword> class </keyword>"}}
@@ -532,7 +533,7 @@ let CompileClass tokens =
 {{indent 1 "<symbol> } </symbol>"}}
 </class>
 """
-*)
+
 let classTokens = [
   Keyword "class";
   Identifier "Main";
@@ -561,13 +562,15 @@ let testTokens2 = [
 let classVarDecsTest = [
   Keyword "static";
   Keyword "boolean";
-  Identifier "test";
+  Identifier "b";
   Symbol ','; 
   Identifier "test2";
   Symbol ';';
   Keyword "static";
   Keyword "int";
   Identifier "i";
+  Symbol ',';
+  Identifier "p";
   Symbol ';'
 ]
 
@@ -721,6 +724,8 @@ printfn ""
 printfn "%A" (CompileSubroutineBody subroutineBodyTest st)
 printfn ""
 printfn "%A" (CompileSubroutineDecs subroutineDecsTest st)
+printfn ""
+printfn "%A" (CompileClass classTest)
 
 
 (*
