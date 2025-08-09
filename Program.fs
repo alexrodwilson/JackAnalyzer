@@ -10,9 +10,10 @@ let tokenizeAndXmlizeFile (fn: string) =
   let xmlOutFn = Path.ChangeExtension (fn, ".xml")
   let text = File.ReadAllText fn
   let tokens = tokenize text
+  printfn "%A" ("Starting to write " + xmlOutFn + "...")
   let xml = CompilationEngine.CompileClass tokens
-  File.WriteAllLines(tokenOutFn, "<tokens>" :: (List.map tokenToXml  tokens) @ ["</tokens>"])
-  printfn "%s written" tokenOutFn
+ // File.WriteAllLines(tokenOutFn, "<tokens>" :: (List.map tokenToXml  tokens) @ ["</tokens>"])
+ // printfn "%s written" tokenOutFn
   File.WriteAllText (xmlOutFn, xml)
   printfn "%s written" xmlOutFn
 
@@ -29,7 +30,4 @@ let main args =
     | fn when (File.Exists fn) && Path.GetExtension(fn) = ".jack" ->
        tokenizeAndXmlizeFile fn
     | fn -> printfn "%s is not a valid file/directory" fn
-  //let tokens = [(Keyword "class"); (Identifier "Main");
-   // (Symbol '{'); (Symbol '}')]
- // printfn "%s" (CompileClass tokens)
   0
