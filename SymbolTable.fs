@@ -43,7 +43,7 @@ let add name t kind st =
   | Static | Field -> {st with ClassSymbols = (Map.add name {T = t; Kind = kind; Index = i} st.ClassSymbols)}
   | Arg | Var -> {st with SubroutineSymbols = (Map.add name {T = t; Kind = kind; Index = i} st.SubroutineSymbols)}
 
-let wipeSymbolTable st = 
+let wipeSubroutineSymbols st = 
   {st with SubroutineSymbols = Map.empty}
 
 let functionOf name f st = 

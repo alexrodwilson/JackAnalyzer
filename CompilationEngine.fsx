@@ -452,7 +452,6 @@ let CompileParameterList tokens symbolTable =
 </parameterList>"""
       xml
     | head::tail when head = Symbol ',' -> aux tail count (xml + "\n" + (tokenToXml head) + "\n")
-                                           
     | head::tail -> 
       let typeToken, tokens = getNextTokenIf isTypeProgramStructure tokens
       let varNameToken, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
@@ -469,6 +468,7 @@ let CompileParameterList tokens symbolTable =
   | _ -> aux tokens 0 ""
         
 let CompileSubroutineBody (tokens: Token list) symbolTable = 
+  let symbolTable = SymbolTable.wipeSubroutineSymbols symbolTable
   let tokens = eatIf (isSameToken (Symbol '{')) tokens
   let varDecsXml, tokens, symbolTable = CompileVarDecs tokens symbolTable
   let statementsXml, tokens = CompileStatements tokens 0 symbolTable
@@ -479,38 +479,44 @@ let CompileSubroutineBody (tokens: Token list) symbolTable =
 {{indent 1 "<symbol> } </symbol>"}}
 </subroutineBody>""", symbolTable
     
-(*
-let CompileSubroutineDecs tokens =
-  let doOneSubroutineDec tokens =
+
+let CompileSubroutineDecs tokens symbolTable =
+  let doOneSubroutineDec tokens symbolTable =
     let constructorFunctionMethod, ts = getNextTokenIf (isOneOfTokens [Keyword "constructor"; Keyword "function"; Keyword "method"]) tokens
-    let voidOrType, ts = getNextTokenIf isTypeOrVoid ts
-    let subroutineName, ts = getNextTokenIf (isSameType (Identifier "_")) ts
+    let voidOrTypeToken, ts = getNextTokenIf isTypeOrVoid ts
+    let voidOrTypeXml = 
+      match voidOrTypeToken with
+      | Keyword _ -> tokenToXml voidOrTypeToken
+      | Identifier _ -> identifierToXml voidOrTypeToken Class Use symbolTable
+      | _ -> failwith ("Unexpected token when expecting void or a type: " + (string voidOrTypeToken))
+    let subroutineNameToken, ts = getNextTokenIf (isSameType (Identifier "_")) ts
+    let subroutineNameXml = identifierToXml subroutineNameToken Subroutine Definition symbolTable
     let ts = eatIf (isSameToken (Symbol '(')) ts
     let parameterTokens, ts = advanceUntil (fun x -> x = (Symbol ')')) ts false
-    let parameterXml = CompileParameterList parameterTokens 
+    let parameterXml = CompileParameterList parameterTokens symbolTable 
     let ts = eatIf (isSameToken (Symbol ')')) ts
     let subroutineBodyTokens, ts = advanceUntilMatchingBracket (Symbol '{') (Symbol '}') ts true
-    let subroutineBodyXml = CompileSubroutineBody subroutineBodyTokens
+    let subroutineBodyXml, symbolTable = CompileSubroutineBody subroutineBodyTokens symbolTable
     $$"""<subroutineDec>
 {{indent 1 (tokenToXml constructorFunctionMethod)}}
-{{indent 1 (tokenToXml voidOrType)}}
-{{indent 1 (tokenToXml subroutineName)}}
+{{indent 1 voidOrTypeXml}}
+{{indent 1  subroutineNameXml}}
 {{indent 1 "<symbol> ( </symbol>"}}  
 {{indent 1 parameterXml}}
 {{indent 1 "<symbol> ) </symbol>"}}
 {{indent 1  subroutineBodyXml}}
 </subroutineDec>"""
-      , ts
-  let rec aux remainingTokens xml =
+      , ts, symbolTable
+  let rec aux remainingTokens xml symbolTable =
     match remainingTokens with
     | head::tail when head = Keyword "constructor" || head = Keyword "function" || head = Keyword "method" -> 
-      let oneDecXml, remainingTokens = doOneSubroutineDec remainingTokens
+      let oneDecXml, remainingTokens, symbolTable = doOneSubroutineDec remainingTokens symbolTable
       let xml = xml + "\n" + oneDecXml
-      aux remainingTokens xml
-    | _ -> xml, remainingTokens
-  aux tokens ""
+      aux remainingTokens xml symbolTable
+    | _ -> xml, remainingTokens, symbolTable
+  aux tokens "" symbolTable
 
-    
+(*
 let CompileClass tokens = 
  let tokens = eatIf (isSameToken (Keyword "class")) tokens
  let className, tokens = getNextTokenIf ((isSameType (Identifier "_"))) tokens
@@ -632,7 +638,7 @@ let subroutineCallTest2 = [Identifier "point"; Symbol '.'; Identifier "doSomethi
 let doTest = [Keyword "do"; Identifier "doSomething"; Symbol '('; IntConstant 1; Symbol '+'; IntConstant 2;
 Symbol ','; StringConstant "dog"; Symbol ','; Identifier "i"; Symbol ')'; Symbol ';']
 let statementsTest = List.concat [letTest; doTest; returnTest]
-let subroutineBodyTest = List.concat [[Symbol '{'; Keyword "var"; Keyword "int"; Identifier "i"; Symbol ','; Identifier "j"; Symbol ';'; 
+let subroutineBodyTest = List.concat [[Symbol '{'; Keyword "var"; Keyword "int"; Identifier "i"; Symbol ','; Identifier "x"; Symbol ','; Identifier "j"; Symbol ';'; 
   Keyword "var"; Identifier "String"; Identifier "s"; Symbol ';';]; statementsTest; [Symbol '}']]
 let subroutineDecsTest = List.concat[
   [Keyword "function";
@@ -677,7 +683,7 @@ let expressionListTest = [IntConstant 4; Symbol '+'; IntConstant 2; Symbol ','; 
 let classTest = List.concat [[Keyword "class"; Identifier "Point"; Symbol '{'] ; classVarDecsTest; subroutineDecsTest; [Symbol '}']]
 
 let emptyBracketsTest = [Symbol '{'; Symbol '}']
-let st = SymbolTable.add "b" "boolean" SymbolTable.Arg (SymbolTable.add "p" "Point" SymbolTable.Arg (SymbolTable.add "x" "int" SymbolTable.Arg (SymbolTable.add "i" "int" SymbolTable.Var (SymbolTable.add "foo" "string" SymbolTable.Var (SymbolTable.create())))))
+let st = SymbolTable.add "HEIGHT" "int" SymbolTable.Static ( SymbolTable.add "b" "boolean" SymbolTable.Arg (SymbolTable.add "p" "Point" SymbolTable.Arg (SymbolTable.add "x" "int" SymbolTable.Arg (SymbolTable.add "i" "int" SymbolTable.Var (SymbolTable.add "foo" "string" SymbolTable.Var (SymbolTable.create()))))))
 printfn "%A" (identifierToXml (Identifier "foo") InTable Use st)
 printfn ""
 printfn "%A" (CompileTerm [Identifier "foo"] 0 st)
@@ -713,7 +719,8 @@ printfn ""
 printfn "%A" (CompileParameterList paramTest st)
 printfn ""
 printfn "%A" (CompileSubroutineBody subroutineBodyTest st)
-
+printfn ""
+printfn "%A" (CompileSubroutineDecs subroutineDecsTest st)
 
 
 (*
