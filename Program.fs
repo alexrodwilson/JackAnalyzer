@@ -10,7 +10,7 @@ let tokenizeAndXmlizeFile (fn: string) =
   let xmlOutFn = Path.ChangeExtension (fn, ".xml")
   let text = File.ReadAllText fn
   let tokens = tokenize text
-  printfn "%A" ("Starting to write " + xmlOutFn + "...")
+//  printfn "%A" ("Starting to write " + xmlOutFn + "...")
   let xml = CompilationEngine.CompileClass tokens
  // File.WriteAllLines(tokenOutFn, "<tokens>" :: (List.map tokenToXml  tokens) @ ["</tokens>"])
  // printfn "%s written" tokenOutFn

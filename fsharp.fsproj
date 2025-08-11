@@ -8,6 +8,7 @@
   <ItemGroup>
     <Compile Include="Tokenizer.fs" />
     <Compile Include="SymbolTable.fs" />
+    <Compile Include="VMWriter.fs" />
     <Compile Include="CompilationEngine.fs" /> 
     <Compile Include="Program.fs" />
   </ItemGroup>
