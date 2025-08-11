@@ -25,6 +25,7 @@ let varCount kind st =
    match kind with
    | Static | Field -> st.ClassSymbols
    | Arg | Var -> st.SubroutineSymbols
+   | None -> failwith $"Variables with a kind of None are not stored in the symbol table"
   correctTable
   |> Map.filter (fun _ v -> v.Kind = kind)
   |> Map.count
@@ -33,6 +34,7 @@ let kindHasNameAlready name kind st =
   match kind with 
   | Static | Field -> st.ClassSymbols.ContainsKey name
   | Arg | Var -> st.SubroutineSymbols.ContainsKey name
+  | None -> failwith $"Variables with a kind of None are not contained in the symbol table"
 
 let add name t kind st =
   let i = 
@@ -42,6 +44,7 @@ let add name t kind st =
   match kind with
   | Static | Field -> {st with ClassSymbols = (Map.add name {T = t; Kind = kind; Index = i} st.ClassSymbols)}
   | Arg | Var -> {st with SubroutineSymbols = (Map.add name {T = t; Kind = kind; Index = i} st.SubroutineSymbols)}
+  | None -> failwith $"Variables with a kind of None are not contained within the symbol table"
 
 let wipeSubroutineSymbols st = 
   {st with SubroutineSymbols = Map.empty}
