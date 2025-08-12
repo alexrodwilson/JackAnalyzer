@@ -1,6 +1,6 @@
 module VMWriter
 
-type  Segment = ARGUMENT | LOCAL | STATIC | THIS | THAT | POINTER | TEMP
+type  Segment = CONST | ARG | LOCAL | STATIC | THIS | THAT | POINTER | TEMP
 
 type  Command = ADD | SUB | NEG | EQ | GT | LT | AND | OR | NOT
 
@@ -12,7 +12,7 @@ let vmIndent s =
 
 let segmentToString segment = 
   match segment with
-  | ARGUMENT | LOCAL | STATIC | THIS | THAT | POINTER | TEMP ->  (string segment).ToLower()
+  CONST | ARG | LOCAL | STATIC | THIS | THAT | POINTER | TEMP ->  (string segment).ToLower()
 
 let commandToString  command = 
   match command  with
@@ -22,7 +22,9 @@ let writePush segment index =
  vmIndent  $"push {segmentToString segment} {index}"
 
 let writePop segment index = 
- vmIndent  $"pop {segmentToString segment} {index}"
+ match segment with
+ | CONST -> failwith "Error: You cannot pop to the CONST segment"
+ | _ -> vmIndent  $"pop {segmentToString segment} {index}"
 
 let writeArithmetic command =
   vmIndent (commandToString command)
@@ -45,4 +47,4 @@ let writeFunction name nVars =
 let writeReturn() =
   vmIndent "return"
 
-printfn "%A" (writePush ARGUMENT 2)
+printfn "%A" (writePush ARG 2)
