@@ -7,15 +7,15 @@ let tokenizeAndXmlizeFile (fn: string) =
   let directoryName = Path.GetDirectoryName(fn)
   let fileNameWithoutExtension = Path.GetFileNameWithoutExtension(fn)
   let tokenOutFn = Path.Combine(directoryName, (fileNameWithoutExtension + "T" + ".xml"))
-  let xmlOutFn = Path.ChangeExtension (fn, ".xml")
+  let vmOutFn = Path.ChangeExtension (fn, ".vm")
   let text = File.ReadAllText fn
   let tokens = tokenize text
 //  printfn "%A" ("Starting to write " + xmlOutFn + "...")
-  let xml = CompilationEngine.CompileClass tokens
+  let vm = CompilationEngine.CompileClass tokens
  // File.WriteAllLines(tokenOutFn, "<tokens>" :: (List.map tokenToXml  tokens) @ ["</tokens>"])
  // printfn "%s written" tokenOutFn
-  File.WriteAllText (xmlOutFn, xml)
-  printfn "%s written" xmlOutFn
+  File.WriteAllText (vmOutFn, vm)
+  printfn "%s written" vmOutFn
 
 [<EntryPoint>]
 let main args =

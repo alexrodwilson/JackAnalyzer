@@ -2,6 +2,7 @@ module CompilationEngine
 //#load "Tokenizer.fs"
 //#load "SymbolTable.fs"
 open Tokenizer
+open VMWriter
 
 let SPACES_PER_INDENT = 2
 
@@ -135,25 +136,32 @@ let identifierToXml identifier category role symbolTable =
 {{indent 1 roleXml}}
 {{indent 1 indexXml}}
 </identifier>"""
+let stringConstantToVm s =
+  "Not implemented yet"
 
 let rec CompileTerm (tokens: Token list) nestingLevel symbolTable = 
   let innerXml, leftOverTokens =
     match tokens.Head with
-    | IntConstant i -> indent (nestingLevel + 1) (tokenToXml tokens.Head), tokens.Tail
-    | StringConstant s ->indent (nestingLevel + 1) (tokenToXml tokens.Head), tokens.Tail
-    | Keyword k when (List.contains k ["true"; "false"; "null"; "this"]) -> indent (nestingLevel + 1) (tokenToXml tokens.Head), tokens.Tail
+    | IntConstant i ->  writePush CONST i, tokens.Tail
+    | StringConstant s ->  (stringConstantToVm s), tokens.Tail
+    | Keyword k when (List.contains k ["true"; "false"; "null"; "this"]) -> 
+      match k with 
+      | "this" -> "Not implemented yet", tokens.Tail
+      | "false" | "null" -> writePush CONST 0, tokens.Tail
+      | "true" -> $"{writePush CONST 1}
+{writeArithmetic NEG}", tokens.Tail
     | Symbol s when s = '(' -> 
       let expressionTokens, remainingTokens = advanceUntilMatchingBracket (Symbol '(') (Symbol ')') tokens false 
-      let expressionXml = CompileExpression expressionTokens (nestingLevel + 1) symbolTable
-      let termXml = $$"""{{indent (nestingLevel + 1) (tokenToXml (Symbol '('))}}
-{{expressionXml}}
-{{indent (nestingLevel + 1) (tokenToXml (Symbol ')'))}}"""
-      termXml, remainingTokens      
+      let expressionVM = CompileExpression expressionTokens (nestingLevel + 1) symbolTable
+      expressionVM, remainingTokens      
     | Symbol s when (s = '-' || s = '~') -> 
-      let unaryOpXml = tokenToXml tokens.Head
-      let termXml, remainingTokens = CompileTerm tokens.Tail (nestingLevel + 1) symbolTable
-      (unaryOpXml + "\n" + termXml), remainingTokens
-    | Identifier i when tokens.Tail = [] -> indent (nestingLevel + 1 ) (identifierToXml tokens.Head InTable Use symbolTable), []
+      let unaryOpVM = 
+       match s with
+        | '-' -> writeArithmetic NEG 
+        | '~' -> writeArithmetic NOT
+      let termVM, remainingTokens = CompileTerm tokens.Tail (nestingLevel + 1) symbolTable
+      (unaryOpVM + "\n" + termVM), remainingTokens
+    | Identifier i when tokens.Tail = [] ->  (identifierToXml tokens.Head InTable Use symbolTable), []
     | Identifier i when tokens.Tail.Head = (Symbol '[') ->
       let varNameXml = identifierToXml tokens.Head InTable Use symbolTable
       let expressionTokens, remainingTokens = advanceUntilMatchingBracket (Symbol '[') (Symbol ']') tokens.Tail false
@@ -190,7 +198,7 @@ let rec CompileTerm (tokens: Token list) nestingLevel symbolTable =
 {{indent (nestingLevel + 1) (tokenToXml (Symbol ')'))}}""", tokens  
     | Identifier i -> indent (nestingLevel + 1) (identifierToXml tokens.Head InTable Use symbolTable), tokens.Tail
     | _ -> failwith ("Unexpected token found in CompileTerm: " + (string tokens.Head))
-  (indent nestingLevel "<term>") + "\n" + innerXml + "\n" + (indent nestingLevel "</term>"), leftOverTokens
+  innerXml, leftOverTokens
   
 
 and CompileExpression tokens nestingLevel symbolTable =
