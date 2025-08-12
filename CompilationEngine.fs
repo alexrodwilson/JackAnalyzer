@@ -202,18 +202,65 @@ let rec CompileTerm (tokens: Token list) symbolTable =
   
 
 and CompileExpression tokens symbolTable =
+  let rec aux prevTerm prevOp tokens vm =
+    match tokens with 
+    | [] -> vm
+    | head::tail -> 
+      match head with 
+      | Symbol s when s <> '(' ->
+        let symbolVm = 
+          match s with 
+          | '*' -> writeCall "Math.multiply" 2
+          | '+' -> writeArithmetic ADD 
+          | '-' -> writeArithmetic SUB
+          | '=' -> writeArithmetic EQ
+          | '>' -> writeArithmetic GT
+          | '<' -> writeArithmetic LT
+          | '&' -> writeArithmetic AND
+          | '|' -> writeArithmetic OR
+          | _ -> failwith ("Unexpected symbol where operator expected: " + (string s))
+        aux prevTerm (Some symbolVm) tail vm
+      | _ ->
+        let termVm, tokens = CompileTerm tokens symbolTable
+        match prevTerm with
+        | None -> aux (Some termVm) prevOp tokens vm
+        | Some t -> 
+          let opVm = 
+            match prevOp with
+            | Some op -> op
+            | None -> failwith ("Wrong token when operator expected: " + (string head))
+          let newVm = $"{vm}
+{t}
+{termVm}
+{opVm}"
+          aux None None tokens newVm
+  aux None None tokens ""
+
+(*and CompileExpression tokens symbolTable =
   let rec aux expectingTerm remainingTokens xml  =
     match remainingTokens with 
     | [] -> $"{xml}"
     | head::tail when (not expectingTerm) -> 
       match head with
-      | _ when (isOp head) -> aux true tail (xml + "\n" + (tokenToXml head) + "\n")
-      | _ -> failwith ("Unexpected token when expected op in expression: " + (string head))
+      | Symbol s  when (isOp head) -> 
+      let command  = 
+        match s  with
+        | '+' -> ADD
+        | '-' -> SUB
+        | '=' -> EQ
+        | '>' -> GT
+        | '<' -> LT
+        | '&' -> AND
+        | '|' -> OR
+        | '*' -> 
+        | _ -> failwith ("Unexpected symbol when expecting operator: " + (string s))
+      aux true tail (xml + "\n" + (writeArithmetic command) + "\n")
+      | _ -> failwith ("Unexpected token when expecting op in expression: " + (string head))
     | head::tail -> 
       let termXml, remainingTokens = CompileTerm remainingTokens symbolTable
       aux false remainingTokens (xml + termXml) 
   let xml = aux true tokens "" 
-  xml
+  xml*)
 
 and CompileExpressionList tokens symbolTable = 
   let rec aux remainingTokens xml count expectingExpression =
