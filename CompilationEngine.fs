@@ -140,6 +140,22 @@ let identifierToXml identifier category role symbolTable =
 let stringConstantToVm s =
   "Not implemented yet"
 
+let identifierToVm token symbolTable =
+  let name = 
+    match token with
+    | Identifier i -> i
+    | _ -> failwith ("Wrong token found where identifier expected: " + (string token))
+  let kind = SymbolTable.kindOf name symbolTable
+  let segment =
+    match kind with
+    | SymbolTable.Static -> STATIC
+    | SymbolTable.Field -> THIS
+    | SymbolTable.Arg -> ARG
+    | SymbolTable.Var -> THIS
+    | SymbolTable.None -> failwith("Symbol not found in symbolTable during compilation process: " + (string token))
+  let index = SymbolTable.indexOf name symbolTable
+  writePush segment index
+
 let getStringFromIdentifierToken identifier = 
   match identifier with
   | Identifier i -> i
@@ -167,7 +183,7 @@ let rec CompileTerm (tokens: Token list) symbolTable =
         | '~' -> writeArithmetic NOT
       let termVM, remainingTokens = CompileTerm tokens.Tail symbolTable
       (unaryOpVM + "\n" + termVM), remainingTokens
-    | Identifier i when tokens.Tail = [] ->  (identifierToXml tokens.Head InTable Use symbolTable), []
+    | Identifier i when tokens.Tail = [] ->  identifierToVm tokens.Head symbolTable, []
     | Identifier i when tokens.Tail.Head = (Symbol '[') ->
       let varNameXml = identifierToXml tokens.Head InTable Use symbolTable
       let expressionTokens, remainingTokens = advanceUntilMatchingBracket (Symbol '[') (Symbol ']') tokens.Tail false
@@ -199,7 +215,7 @@ let rec CompileTerm (tokens: Token list) symbolTable =
         $"{expressionListVm}
 {writeCall fullName nOfExpressions}", tokens
       | _ -> identifierToXml classOrVarNameToken InTable Use symbolTable, tokens
-    | Identifier i -> (identifierToXml tokens.Head InTable Use symbolTable), tokens.Tail
+    | Identifier i -> identifierToVm tokens.Head symbolTable, tokens.Tail
     | _ -> failwith ("Unexpected token found in CompileTerm: " + (string tokens.Head))
   innerXml, leftOverTokens
   
