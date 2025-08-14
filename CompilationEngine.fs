@@ -238,32 +238,6 @@ and CompileExpression tokens symbolTable =
           aux None None tokens newVm
   aux None None tokens ""
 
-(*and CompileExpression tokens symbolTable =
-  let rec aux expectingTerm remainingTokens xml  =
-    match remainingTokens with 
-    | [] -> $"{xml}"
-    | head::tail when (not expectingTerm) -> 
-      match head with
-      | Symbol s  when (isOp head) -> 
-      let command  = 
-        match s  with
-        | '+' -> ADD
-        | '-' -> SUB
-        | '=' -> EQ
-        | '>' -> GT
-        | '<' -> LT
-        | '&' -> AND
-        | '|' -> OR
-        | '*' -> 
-        | _ -> failwith ("Unexpected symbol when expecting operator: " + (string s))
-      aux true tail (xml + "\n" + (writeArithmetic command) + "\n")
-      | _ -> failwith ("Unexpected token when expecting op in expression: " + (string head))
-    | head::tail -> 
-      let termXml, remainingTokens = CompileTerm remainingTokens symbolTable
-      aux false remainingTokens (xml + termXml) 
-  let xml = aux true tokens "" 
-  xml*)
-
 and CompileExpressionList tokens symbolTable = 
   let rec aux remainingTokens xml count expectingExpression =
     match remainingTokens with
@@ -307,7 +281,7 @@ let CompileLetStatement tokens nestingLevel symbolTable =
 {{indent (nestingLevel + 1) (tokenToXml (Symbol ';'))}}
 {{indent nestingLevel "</letStatement>"}}""", remainingTokens
     
-let CompileDoStatement tokens nestingLevel symbolTable =
+let CompileDoStatement tokens symbolTable =
   let tokens = eatIf (isSameToken (Keyword "do")) tokens
   let subroutineCallTokens, tokens = advanceUntil (fun x -> x = (Symbol ';')) tokens false
   let subroutineCallXml, notNeeded = CompileTerm subroutineCallTokens symbolTable
@@ -339,7 +313,7 @@ let rec CompileStatements tokens nestingLevel funcIsVoid symbolTable =
       let letStatementXml, tokens = CompileLetStatement tokens 0 symbolTable
       aux tokens (xml + "\n" + letStatementXml)
     | head::tail when head = (Keyword "do") ->
-      let doStatementXml, tokens = CompileDoStatement tokens 0 symbolTable
+      let doStatementXml, tokens = CompileDoStatement tokens symbolTable
       aux tokens (xml + "\n" + doStatementXml)
     | head::tail when head = (Keyword "return") ->
       let returnStatementXml, tokens = CompileReturnStatement tokens 0 funcIsVoid  symbolTable
@@ -743,7 +717,7 @@ printfn "%A" (CompileTerm [Identifier "notInTableHA"; Symbol '.'; Identifier "Fu
 printfn ""
 printfn "%A" (CompileLetStatement letTest2 0 st)
 printfn ""
-printfn "%A" (CompileDoStatement doTest 0 st)
+//printfn "%A" (CompileDoStatement doTest 0 st)
 printfn ""
 //printfn "%A" (CompileReturnStatement returnTest 0 st)
 printfn ""
