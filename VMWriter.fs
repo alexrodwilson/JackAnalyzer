@@ -12,7 +12,9 @@ let vmIndent s =
 
 let segmentToString segment = 
   match segment with
-  CONST | ARG | LOCAL | STATIC | THIS | THAT | POINTER | TEMP ->  (string segment).ToLower()
+  | LOCAL | STATIC | THIS | THAT | POINTER | TEMP ->  (string segment).ToLower()
+  | CONST -> "constant"
+  | ARG -> "argument"
 
 let commandToString  command = 
   match command  with
