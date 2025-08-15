@@ -379,7 +379,7 @@ let rec CompileStatements tokens funcIsVoid counter symbolTable =
       let ifStatementXml, tokens, counter  = CompileIfStatement tokens funcIsVoid counter symbolTable
       aux tokens counter (xml + "\n" + ifStatementXml)
     | head::tail when head = (Keyword "while") ->
-      let whileStatementXml, tokens = CompileWhileStatement tokens funcIsVoid counter symbolTable
+      let whileStatementXml, tokens, counter  = CompileWhileStatement tokens funcIsVoid counter symbolTable
       aux tokens counter (xml + "\n" + whileStatementXml)
     | head::tail -> failwith ("Unexpected token in CompileStatements" + (string head))
   aux tokens counter ""
@@ -418,10 +418,19 @@ and CompileWhileStatement tokens isVoidFunc counter symbolTable =
   let tokens = eatIf (isSameToken (Keyword "while")) tokens
   let expressionTokens, tokens = advanceUntilMatchingBracket (Symbol '(') (Symbol ')') tokens false
   let statementsTokens, tokens = advanceUntilMatchingBracket (Symbol '{') (Symbol '}') tokens false
-  let expressionXml = CompileExpression expressionTokens symbolTable
-  let statementsXml, _, counter = CompileStatements statementsTokens isVoidFunc counter symbolTable
-  $"{expressionXml}
-{statementsXml}", tokens
+  let expressionVm = CompileExpression expressionTokens symbolTable
+  let statementsVm, _, counter = CompileStatements statementsTokens isVoidFunc counter symbolTable
+  let counter = counter + 1
+  let label1 = "L" + (string counter)
+  let counter = counter + 1
+  let label2 = "L" + (string counter)
+  $"{writeLabel label1}
+{expressionVm}
+{writeArithmetic NOT}
+{writeIf label2}
+{statementsVm}
+{writeGoto label1}
+{writeLabel label2}", tokens, counter
 
 let CompileVarDecs tokens symbolTable =
   let mutable mutSymbolTable = symbolTable
