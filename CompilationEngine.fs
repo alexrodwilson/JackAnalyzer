@@ -156,6 +156,22 @@ let identifierToVm token symbolTable =
   let index = SymbolTable.indexOf name symbolTable
   writePush segment index
 
+let getSegmentAndIndex identifier symbolTable = 
+  let name = 
+    match identifier with
+    | Identifier i -> i
+    | _ -> failwith ("Wrong token found where identifier expected: " + (string identifier))
+  let kind = SymbolTable.kindOf name symbolTable 
+  let segment =
+    match kind with
+    | SymbolTable.Static -> STATIC
+    | SymbolTable.Field -> THIS
+    | SymbolTable.Arg -> ARG
+    | SymbolTable.Var -> THIS
+    | SymbolTable.None -> failwith("Symbol not found in symbolTable during compilation process: " + (string identifier))
+  let index = SymbolTable.indexOf name symbolTable
+  segment, index
+
 let getStringFromIdentifierToken identifier = 
   match identifier with
   | Identifier i -> i
@@ -168,7 +184,7 @@ let rec CompileTerm (tokens: Token list) symbolTable =
     | StringConstant s ->  (stringConstantToVm s), tokens.Tail
     | Keyword k when (List.contains k ["true"; "false"; "null"; "this"]) -> 
       match k with 
-      | "this" -> "Not implemented yet", tokens.Tail
+      | "this" -> writePush ARG 0, tokens.Tail 
       | "false" | "null" -> writePush CONST 0, tokens.Tail
       | "true" -> $"{writePush CONST 1}
 {writeArithmetic NEG}", tokens.Tail
@@ -177,12 +193,12 @@ let rec CompileTerm (tokens: Token list) symbolTable =
       let expressionVM = CompileExpression expressionTokens symbolTable
       expressionVM, remainingTokens      
     | Symbol s when (s = '-' || s = '~') -> 
-      let unaryOpVM = 
+      let unaryOpVm = 
        match s with
         | '-' -> writeArithmetic NEG 
         | '~' -> writeArithmetic NOT
-      let termVM, remainingTokens = CompileTerm tokens.Tail symbolTable
-      (unaryOpVM + "\n" + termVM), remainingTokens
+      let termVm, remainingTokens = CompileTerm tokens.Tail symbolTable
+      (termVm + "\n" + unaryOpVm), remainingTokens
     | Identifier i when tokens.Tail = [] ->  identifierToVm tokens.Head symbolTable, []
     | Identifier i when tokens.Tail.Head = (Symbol '[') ->
       let varNameXml = identifierToXml tokens.Head InTable Use symbolTable
@@ -270,8 +286,30 @@ and CompileExpressionList tokens symbolTable =
   let xml, count = aux tokens "" 0 true
   xml, count 
   
+let CompileLetStatement tokens symbolTable = 
+  let tokens = eatIf (isSameToken (Keyword "let")) tokens
+  let varNameToken, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
+  match tokens.Head with
+  | Symbol s when s = '[' ->
+    let expressionTokens, tokens = advanceUntilMatchingBracket (Symbol '[') (Symbol ']') tokens false
+    let arrayExpressionVm = CompileExpression expressionTokens symbolTable
+    let tokens = eatIf (isSameToken (Symbol '=')) tokens
+    let rhsExpressionTokens, remainingTokens = advanceUntil (fun x -> x = (Symbol ';')) tokens false
+    let rhsExpressionXml = CompileExpression rhsExpressionTokens symbolTable
+    let remainingTokens = eatIf (isSameToken (Symbol ';')) remainingTokens
+    "not implemented yet", remainingTokens
+  | Symbol s when s = '=' ->
+    let tokens = eatIf (isSameToken (Symbol '=')) tokens
+    let rhsExpressionTokens, remainingTokens = advanceUntil (fun x -> x = (Symbol ';')) tokens false
+    let rhsExpressionVm = CompileExpression rhsExpressionTokens symbolTable
+    let remainingTokens = eatIf (isSameToken (Symbol ';')) remainingTokens
+    let segment, index = getSegmentAndIndex varNameToken  symbolTable
+    $"{rhsExpressionVm}
+{writePop segment index}", remainingTokens
+  | _ -> failwith("Unexpected token found when compiling let statement, expecting '[' or '=': " + (string tokens.Head))
 
-let CompileLetStatement tokens nestingLevel symbolTable = 
+
+(*let CompileLetStatement tokens nestingLevel symbolTable = 
   let tokens = eatIf (isSameToken (Keyword "let")) tokens
   let varNameToken, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
   let varNameXml = identifierToXml varNameToken InTable Definition symbolTable
@@ -297,7 +335,8 @@ let CompileLetStatement tokens nestingLevel symbolTable =
 {{indent (nestingLevel + 1) rhsExpressionXml}}
 {{indent (nestingLevel + 1) (tokenToXml (Symbol ';'))}}
 {{indent nestingLevel "</letStatement>"}}""", remainingTokens
-    
+*)    
+
 let CompileDoStatement tokens symbolTable =
   let tokens = eatIf (isSameToken (Keyword "do")) tokens
   let subroutineCallTokens, tokens = advanceUntil (fun x -> x = (Symbol ';')) tokens false
@@ -327,7 +366,7 @@ let rec CompileStatements tokens funcIsVoid symbolTable =
     | [] -> xml, tokens
     | head::tail when head = Symbol '}' -> xml, tokens
     | head::tail when head = (Keyword "let") -> 
-      let letStatementXml, tokens = CompileLetStatement tokens 0 symbolTable
+      let letStatementXml, tokens = CompileLetStatement tokens symbolTable
       aux tokens (xml + "\n" + letStatementXml)
     | head::tail when head = (Keyword "do") ->
       let doStatementXml, tokens = CompileDoStatement tokens symbolTable
@@ -725,7 +764,7 @@ printfn "%A" (CompileTerm [Identifier "foo"; Symbol '.'; Identifier "FunkName"; 
 printfn ""
 printfn "%A" (CompileTerm [Identifier "notInTableHA"; Symbol '.'; Identifier "FunkName"; Symbol '('; IntConstant 3; Symbol ','; StringConstant "slop"; Symbol ')']  st)
 printfn ""
-printfn "%A" (CompileLetStatement letTest2 0 st)
+printfn "%A" (CompileLetStatement letTest2 st)
 printfn ""
 //printfn "%A" (CompileDoStatement doTest 0 st)
 printfn ""
