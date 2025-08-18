@@ -152,7 +152,7 @@ let identifierToVm token symbolTable =
     | SymbolTable.Static -> STATIC
     | SymbolTable.Field -> THIS
     | SymbolTable.Arg -> ARG
-    | SymbolTable.Var -> THIS
+    | SymbolTable.Var -> LOCAL 
     | SymbolTable.None -> failwith("Symbol not found in symbolTable during compilation process: " + (string token))
   let index = SymbolTable.indexOf name symbolTable
   writePush segment index
@@ -168,7 +168,7 @@ let getSegmentAndIndex identifier symbolTable =
     | SymbolTable.Static -> STATIC
     | SymbolTable.Field -> THIS
     | SymbolTable.Arg -> ARG
-    | SymbolTable.Var -> THIS
+    | SymbolTable.Var -> LOCAL
     | SymbolTable.None -> failwith("Symbol not found in symbolTable during compilation process: " + (string identifier))
   let index = SymbolTable.indexOf name symbolTable
   segment, index
