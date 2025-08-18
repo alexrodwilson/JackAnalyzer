@@ -6,6 +6,7 @@ open Tokenizer
 open VMWriter
 
 let SPACES_PER_INDENT = 2
+let mutable ticker = 0
 
 type Category = Class | Subroutine | InTable
 type Role = Definition | Use
@@ -457,15 +458,15 @@ let rec CompileStatements tokens funcIsVoid counter symbolTable =
   aux tokens counter ""
 
 and CompileIfStatement tokens isVoidFunc counter symbolTable =
+  let label1 = "L" + (string ticker)
+  ticker <- ticker + 1
+  let label2 = "L" + (string ticker)
+  ticker <- ticker + 1
   let tokens = eatIf (isSameToken (Keyword "if")) tokens
   let conditionTokens, tokens = advanceUntilMatchingBracket (Symbol '(') (Symbol ')') tokens false
   let conditionVm = CompileExpression conditionTokens symbolTable
   let statementsTokens, tokens = advanceUntilMatchingBracket (Symbol '{') (Symbol '}') tokens false
   let conditionTrueStatementsVm, _, counter = CompileStatements statementsTokens isVoidFunc counter symbolTable
-  let counter = counter + 1
-  let label1 = "L" + (string counter)
-  let counter = counter + 1
-  let label2 = "L" + (string counter)
   match tokens with
   | head::tail when head = (Keyword "else") -> 
     let tokens = eatIf (isSameToken (Keyword "else")) tokens 
@@ -487,15 +488,15 @@ and CompileIfStatement tokens isVoidFunc counter symbolTable =
 {writeLabel label1}", tokens, counter
 
 and CompileWhileStatement tokens isVoidFunc counter symbolTable = 
+  let label1 = "L" + (string ticker)
+  ticker <- ticker + 1
+  let label2 = "L" + (string ticker)
+  ticker <- ticker + 1
   let tokens = eatIf (isSameToken (Keyword "while")) tokens
   let expressionTokens, tokens = advanceUntilMatchingBracket (Symbol '(') (Symbol ')') tokens false
   let statementsTokens, tokens = advanceUntilMatchingBracket (Symbol '{') (Symbol '}') tokens false
   let expressionVm = CompileExpression expressionTokens symbolTable
   let statementsVm, _, counter = CompileStatements statementsTokens isVoidFunc counter symbolTable
-  let counter = counter + 1
-  let label1 = "L" + (string counter)
-  let counter = counter + 1
-  let label2 = "L" + (string counter)
   $"{writeLabel label1}
 {expressionVm}
 {writeArithmetic NOT}
@@ -635,7 +636,7 @@ let CompileSubroutineBody (tokens: Token list) subroutineIsVoid counter symbolTa
   statementsXml, nOfVarDecs, symbolTable
     
 
-let CompileSubroutineDecs tokens counter symbolTable =
+let CompileSubroutineDecs tokens className counter symbolTable =
   let doOneSubroutineDec tokens symbolTable =
     let constructorFunctionMethod, ts = getNextTokenIf (isOneOfTokens [Keyword "constructor"; Keyword "function"; Keyword "method"]) tokens
     let voidOrTypeToken, ts = getNextTokenIf isTypeOrVoid ts
@@ -645,7 +646,7 @@ let CompileSubroutineDecs tokens counter symbolTable =
       | Identifier _ -> false
       | _ -> failwith ("Unexpected token when expecting void or a type: " + (string voidOrTypeToken))
     let subroutineNameToken, ts = getNextTokenIf (isSameType (Identifier "_")) ts
-    let subroutineName = getStringFromIdentifierToken subroutineNameToken 
+    let subroutineName = className + "." + (getStringFromIdentifierToken subroutineNameToken)
    // let subroutineNameXml = identifierToXml subroutineNameToken Subroutine Definition symbolTable
     let ts = eatIf (isSameToken (Symbol '(')) ts
     let parameterTokens, ts = advanceUntil (fun x -> x = (Symbol ')')) ts false
@@ -670,10 +671,11 @@ let CompileClass tokens =
  let symbolTable = SymbolTable.create()
  let counter = 0
  let tokens = eatIf (isSameToken (Keyword "class")) tokens
- let className, tokens = getNextTokenIf ((isSameType (Identifier "_"))) tokens
+ let classNameToken, tokens = getNextTokenIf ((isSameType (Identifier "_"))) tokens
+ let className = getStringFromIdentifierToken classNameToken
  let tokens = eatIf (isSameToken (Symbol '{')) tokens
  let classVarDecs, tokens, symbolTable = CompileClassVarDecs tokens symbolTable
- let classSubroutineDecs, tokens, symbolTable = CompileSubroutineDecs tokens counter symbolTable
+ let classSubroutineDecs, tokens, symbolTable = CompileSubroutineDecs tokens className counter symbolTable
  let tokens = eatIf (isSameToken (Symbol '}')) tokens
  classSubroutineDecs
 
