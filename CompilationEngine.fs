@@ -211,8 +211,7 @@ let rec CompileTerm (tokens: Token list) symbolTable =
       match (SymbolTable.kindOf classOrVarName symbolTable) with
       | SymbolTable.None ->      
         let fullName = (classOrVarName + "." + subroutineName) 
-        $"{expressionListVm}
-{writeCall fullName nOfExpressions}", tokens
+        $"{expressionListVm}{writeCall fullName nOfExpressions}", tokens
       | _ -> identifierToXml classOrVarNameToken InTable Use symbolTable, tokens
     | Identifier i -> identifierToVm tokens.Head symbolTable, tokens.Tail
     | _ -> failwith ("Unexpected token found in CompileTerm: " + (string tokens.Head))
@@ -292,7 +291,9 @@ and CompileExpressionList tokens symbolTable =
       aux remainingTokens vm count true
     | head::tail -> failwith ("Unexpected input to expressionList" + (string head))
   let vm, count = aux tokens "" 0 true
-  vm, count 
+  match vm with
+  | "" -> vm, count 
+  | _ -> "\n" + vm, count
   
 let CompileLetStatement tokens symbolTable = 
   let tokens = eatIf (isSameToken (Keyword "let")) tokens
