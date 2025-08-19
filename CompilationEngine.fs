@@ -384,17 +384,14 @@ and CompileIfStatement tokens isVoidFunc symbolTable =
     $"{conditionVm}
 {writeArithmetic NOT}
 {writeIf label1}
-{conditionTrueStatementsVm}
-{writeGoto label2}
+{conditionTrueStatementsVm}{writeGoto label2}
 {writeLabel label1}
-{conditionFalseStatementsVm}
-{writeLabel label2}" + "\n", tokens 
+{conditionFalseStatementsVm}{writeLabel label2}" + "\n", tokens 
   | _ ->  
     $"{conditionVm}
 {writeArithmetic NOT}
 {writeIf label1}
-{conditionTrueStatementsVm}
-{writeLabel label1}" + "\n", tokens 
+{conditionTrueStatementsVm}{writeLabel label1}" + "\n", tokens 
 
 and CompileWhileStatement tokens isVoidFunc symbolTable = 
   let label1 = "WHILE_TRUE_" + (string ticker)
@@ -410,8 +407,7 @@ and CompileWhileStatement tokens isVoidFunc symbolTable =
 {expressionVm}
 {writeArithmetic NOT}
 {writeIf label2}
-{statementsVm}
-{writeGoto label1}
+{statementsVm}{writeGoto label1}
 {writeLabel label2}
 ", tokens 
 
