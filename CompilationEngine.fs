@@ -313,7 +313,8 @@ let CompileLetStatement tokens symbolTable =
     let remainingTokens = eatIf (isSameToken (Symbol ';')) remainingTokens
     let segment, index = getSegmentAndIndex varNameToken  symbolTable
     $"{rhsExpressionVm}
-{writePop segment index}", remainingTokens
+{writePop segment index}
+"   , remainingTokens
   | _ -> failwith("Unexpected token found when compiling let statement, expecting '[' or '=': " + (string tokens.Head))
 
 let CompileDoStatement tokens symbolTable =
@@ -322,7 +323,8 @@ let CompileDoStatement tokens symbolTable =
   let subroutineCallXml, notNeeded = CompileTerm subroutineCallTokens symbolTable
   let tokens = eatIf (isSameToken (Symbol ';')) tokens
   $"{subroutineCallXml}
-{writePop TEMP 0}", tokens
+{writePop TEMP 0}
+", tokens
 
 let CompileReturnStatement tokens subroutineIsVoid symbolTable = 
   let tokens = eatIf (isSameToken (Keyword "return")) tokens
@@ -337,7 +339,8 @@ let CompileReturnStatement tokens subroutineIsVoid symbolTable =
     | true -> "\n" + (writePush CONST 0)
     | false -> ""
   $"{expressionVm}{voidVm}
-{writeReturn()}", tokens
+{writeReturn()}
+", tokens
 
 let rec CompileStatements tokens funcIsVoid symbolTable = 
   let rec aux tokens xml =
@@ -346,19 +349,19 @@ let rec CompileStatements tokens funcIsVoid symbolTable =
     | head::tail when head = Symbol '}' -> xml, tokens 
     | head::tail when head = (Keyword "let") -> 
       let letStatementXml, tokens = CompileLetStatement tokens symbolTable
-      aux tokens (xml + "\n" + letStatementXml)
+      aux tokens (xml + letStatementXml)
     | head::tail when head = (Keyword "do") ->
       let doStatementXml, tokens = CompileDoStatement tokens symbolTable
-      aux tokens (xml + "\n" + doStatementXml)
+      aux tokens (xml + doStatementXml)
     | head::tail when head = (Keyword "return") ->
       let returnStatementXml, tokens = CompileReturnStatement tokens funcIsVoid symbolTable
-      aux tokens (xml + "\n" + returnStatementXml)
+      aux tokens (xml + returnStatementXml)
     | head::tail when head = (Keyword "if") ->
       let ifStatementXml, tokens = CompileIfStatement tokens funcIsVoid symbolTable
-      aux tokens (xml + "\n" + ifStatementXml)
+      aux tokens (xml + ifStatementXml)
     | head::tail when head = (Keyword "while") ->
       let whileStatementXml, tokens = CompileWhileStatement tokens funcIsVoid symbolTable
-      aux tokens (xml + "\n" + whileStatementXml)
+      aux tokens (xml + whileStatementXml)
     | head::tail -> failwith ("Unexpected token in CompileStatements" + (string head))
   aux tokens ""
 
@@ -384,13 +387,13 @@ and CompileIfStatement tokens isVoidFunc symbolTable =
 {writeGoto label2}
 {writeLabel label1}
 {conditionFalseStatementsVm}
-{writeLabel label2}", tokens 
+{writeLabel label2}" + "\n", tokens 
   | _ ->  
     $"{conditionVm}
 {writeArithmetic NOT}
 {writeIf label1}
 {conditionTrueStatementsVm}
-{writeLabel label1}", tokens 
+{writeLabel label1}" + "\n", tokens 
 
 and CompileWhileStatement tokens isVoidFunc symbolTable = 
   let label1 = "WHILE_TRUE_" + (string ticker)
@@ -408,7 +411,8 @@ and CompileWhileStatement tokens isVoidFunc symbolTable =
 {writeIf label2}
 {statementsVm}
 {writeGoto label1}
-{writeLabel label2}", tokens 
+{writeLabel label2}
+", tokens 
 
 let CompileVarDecs tokens symbolTable =
   let mutable mutSymbolTable = symbolTable
