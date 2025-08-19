@@ -11,12 +11,10 @@ let mutable ticker = 0
 type Category = Class | Subroutine | InTable
 type Role = Definition | Use
 
-
 let indent nestingLevel (string: string) = 
   let spaces = String.replicate (nestingLevel * SPACES_PER_INDENT) " "
   let s = string.Replace("\n", "\n" + spaces)
   spaces + s
-
 
 let advanceUntil test tokens returnLastToken = 
   let rec aux toReturn remainingTokens =
@@ -45,7 +43,6 @@ let advanceUntilMatchingBracket openingBracket closingBracket tokens includeBrac
     | head::tail when head = closingBracket -> aux (head::toReturn) tail lbs (rbs + 1)
     | head::tail -> aux (head::toReturn) tail lbs rbs
   aux [] tokens 0 0
-
 
 let getConsecutivePatterns startTest endTest tokens =
   let rec aux patterns remainingTokens = 
@@ -104,7 +101,6 @@ let maybeGetNextTokenIf test tokens =
   | [] -> failwith "Token stream empty unexpectedly"
   | head::tail when test tokens -> Some head, tail
   | _ -> None, tokens
-
 
 let isOp token = 
   let ops = ['+'; '-'; '*'; '/'; '&'; '|'; '<'; '>';'=']
@@ -253,8 +249,7 @@ and CompileExpression tokens symbolTable =
         let cVm, tokens = CompileTerm leftOver.Tail symbolTable
         $"{term}
 {cVm}
-{bVm}
-{aux tokens false}"
+{bVm}" + (aux tokens false)
     | head :: tail  when not (isOp head) -> 
       let aVm, tokens = CompileTerm tokens symbolTable
       match tokens with
@@ -264,8 +259,7 @@ and CompileExpression tokens symbolTable =
         let cVm, tokens = CompileTerm tokens.Tail symbolTable
         $"{aVm}
 {cVm}
-{bVm}
-{aux tokens false}"
+{bVm}" + (aux tokens false)
     | head :: tail when (isOp head) ->
       match expectingTerm with
       | true -> 
@@ -277,13 +271,12 @@ and CompileExpression tokens symbolTable =
           let cVm, leftOvers = CompileTerm leftOvers.Tail symbolTable
           $"{unaryTerm}
 {cVm}
-{bVm}
-{aux leftOvers false}"
+{bVm}" + (aux leftOvers false)
       | false -> 
         let opVm = opToVm head
         let termVm, tokens = CompileTerm tail symbolTable
         $"{termVm}
-{opVm}{aux tokens false}"
+{opVm}" + (aux tokens false)
   aux tokens true 
 
 and CompileExpressionList tokens symbolTable = 
