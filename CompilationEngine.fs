@@ -284,8 +284,8 @@ and CompileExpressionList tokens symbolTable =
     | [] -> vm, count
     | head::tail when expectingExpression ->
       let currentExpressionTokens, remainingTokens = advanceUntil (fun x -> x = (Symbol ',')) remainingTokens false
-      let currentExpressionVm = (CompileExpression currentExpressionTokens symbolTable) + "\n"
-      aux remainingTokens (vm + currentExpressionVm) (count + 1) false
+      let currentExpressionVm = (CompileExpression currentExpressionTokens symbolTable) 
+      aux remainingTokens (vm + currentExpressionVm + "\n") (count + 1) false
     | head::tail when not expectingExpression ->
       let comma, remainingTokens = getNextTokenIf (isSameToken (Symbol ',')) remainingTokens
       aux remainingTokens vm count true
@@ -333,7 +333,7 @@ let CompileReturnStatement tokens subroutineIsVoid symbolTable =
   let expressionVm =
     match expressionTokens with 
     | [] -> ""
-    | _ -> "\n" + (CompileExpression expressionTokens symbolTable) 
+    | _ -> CompileExpression expressionTokens symbolTable 
   let tokens = eatIf (isSameToken (Symbol ';')) tokens
   let voidVm = 
     match subroutineIsVoid with
@@ -567,7 +567,7 @@ let CompileSubroutineDecs tokens className symbolTable =
     match remainingTokens with
     | head::tail when head = Keyword "constructor" || head = Keyword "function" || head = Keyword "method" -> 
       let oneDecXml, remainingTokens, symbolTable = doOneSubroutineDec remainingTokens symbolTable
-      let xml = xml + "\n" + oneDecXml
+      let xml = xml + oneDecXml
       aux remainingTokens xml symbolTable
     | _ -> xml, remainingTokens, symbolTable
   aux tokens "" symbolTable
