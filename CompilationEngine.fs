@@ -141,27 +141,13 @@ let identifierToXml identifier category role symbolTable =
 let stringConstantToVm s =
   "Not implemented yet"
 
-let identifierToVm token symbolTable =
-  let name = 
-    match token with
-    | Identifier i -> i
-    | _ -> failwith ("Wrong token found where identifier expected: " + (string token))
-  let kind = SymbolTable.kindOf name symbolTable
-  let segment =
-    match kind with
-    | SymbolTable.Static -> STATIC
-    | SymbolTable.Field -> THIS
-    | SymbolTable.Arg -> ARG
-    | SymbolTable.Var -> LOCAL 
-    | SymbolTable.None -> failwith("Symbol not found in symbolTable during compilation process: " + (string token))
-  let index = SymbolTable.indexOf name symbolTable
-  writePush segment index
+let getStringFromIdentifierToken identifier = 
+  match identifier with
+  | Identifier i -> i
+  | _ -> failwith ("Expecting identifier, given: " + (string identifier))
 
 let getSegmentAndIndex identifier symbolTable = 
-  let name = 
-    match identifier with
-    | Identifier i -> i
-    | _ -> failwith ("Wrong token found where identifier expected: " + (string identifier))
+  let name = getStringFromIdentifierToken identifier
   let kind = SymbolTable.kindOf name symbolTable 
   let segment =
     match kind with
@@ -173,10 +159,10 @@ let getSegmentAndIndex identifier symbolTable =
   let index = SymbolTable.indexOf name symbolTable
   segment, index
 
-let getStringFromIdentifierToken identifier = 
-  match identifier with
-  | Identifier i -> i
-  | _ -> failwith ("Expecting identifier, given: " + (string identifier))
+let identifierToVm token symbolTable =
+   let segment, index = getSegmentAndIndex token symbolTable 
+   writePush segment index
+
 
 let rec CompileTerm (tokens: Token list) symbolTable = 
   let innerXml, leftOverTokens =
