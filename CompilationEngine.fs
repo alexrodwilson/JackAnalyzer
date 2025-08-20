@@ -11,7 +11,7 @@ let mutable CLASS_NAME = ""
 
 type Category = Class | Subroutine | InTable
 type Role = Definition | Use
-type SubroutineKind = Function | Method | Constructor
+type SubroutineKind = Function | Method | Constructor 
 
 let indent nestingLevel (string: string) = 
   let spaces = String.replicate (nestingLevel * SPACES_PER_INDENT) " "
@@ -136,6 +136,7 @@ let identifierToXml identifier category role symbolTable =
 {{indent 1 roleXml}}
 {{indent 1 indexXml}}
 </identifier>"""
+
 let stringConstantToVm s =
   "Not implemented yet"
 
@@ -168,7 +169,7 @@ let rec CompileTerm (tokens: Token list) symbolTable =
     | StringConstant s ->  (stringConstantToVm s), tokens.Tail
     | Keyword k when (List.contains k ["true"; "false"; "null"; "this"]) -> 
       match k with 
-      | "this" -> writePush ARG 0, tokens.Tail 
+      | "this" -> writePush POINTER 0, tokens.Tail 
       | "false" | "null" -> writePush CONST 0, tokens.Tail
       | "true" -> $"{writePush CONST 1}
 {writeArithmetic NEG}", tokens.Tail
@@ -340,7 +341,8 @@ let CompileReturnStatement tokens subroutineIsVoid subroutineKind symbolTable =
   let tokens = eatIf (isSameToken (Symbol ';')) tokens
   let constructorVm =
     match subroutineKind with
-    | Constructor -> "\n" + (writePush ARG 0)
+    | Constructor -> ""
+//{writePush POINTER 0}"
     | Function | Method -> ""
   let voidVm = 
     match subroutineIsVoid with
@@ -562,7 +564,6 @@ let CompileSubroutineDecs tokens symbolTable =
       match subroutineKind with
       | Method -> SymbolTable.add "this" CLASS_NAME SymbolTable.Arg symbolTable
       | Function | Constructor -> symbolTable
-
    // let subroutineNameXml = identifierToXml subroutineNameToken Subroutine Definition symbolTable
     let ts = eatIf (isSameToken (Symbol '(')) ts
     let parameterTokens, ts = advanceUntil (fun x -> x = (Symbol ')')) ts false
@@ -570,7 +571,17 @@ let CompileSubroutineDecs tokens symbolTable =
     let ts = eatIf (isSameToken (Symbol ')')) ts
     let subroutineBodyTokens, ts = advanceUntilMatchingBracket (Symbol '{') (Symbol '}') ts true
     let subroutineBodyVm, nOfLocals, symbolTable = CompileSubroutineBody subroutineBodyTokens subroutineIsVoid subroutineKind symbolTable
-    let vm = $"{(writeFunction subroutineName nOfLocals)}
+    let subroutineExtraVm = 
+      match subroutineKind with
+      | Constructor -> $"""
+{writePush CONST (SymbolTable.varCount SymbolTable.Field symbolTable)}
+{writeCall "Memory.alloc" 1}
+{writePop POINTER 0}"""
+      | Method -> $"
+{writePush ARG 0}
+{writePop POINTER 0}"
+      | Function -> ""
+    let vm = $"{(writeFunction subroutineName nOfLocals)}{subroutineExtraVm}
 {subroutineBodyVm}"
     vm, ts, symbolTable
   let rec aux remainingTokens xml symbolTable =
