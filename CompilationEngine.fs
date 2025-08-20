@@ -161,7 +161,6 @@ let identifierToVm token symbolTable =
    let segment, index = getSegmentAndIndex token symbolTable 
    writePush segment index
 
-
 let rec CompileTerm (tokens: Token list) symbolTable = 
   let innerXml, leftOverTokens =
     match tokens.Head with
@@ -510,32 +509,24 @@ let CompileClassVarDecs tokens symbolTable =
 
 
 let CompileParameterList tokens symbolTable = //SymbolTable.add varName typeName varKind mutSymbolTable
-
-  let rec aux tokens count xml symbolTable = 
+  let rec aux tokens count symbolTable = 
     match tokens with
-    | [] -> 
-      let xml = $$"""<parameterList>
-{{indent 1 xml}}  
-</parameterList>"""
-      xml, symbolTable
-    | head::tail when head = Symbol ',' -> aux tail count (xml + "\n" + (tokenToXml head) + "\n") symbolTable
+    | [] -> symbolTable
+    | head::tail when head = Symbol ',' -> aux tail count symbolTable
     | head::tail -> 
       let typeToken, tokens = getNextTokenIf isTypeProgramStructure tokens
       let varNameToken, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
-      let typeXml, typeName = 
+      let typeName = 
         match typeToken with
-        | Keyword k -> tokenToXml typeToken, k
-        | Identifier i -> identifierToXml typeToken Class Use symbolTable, i
+        | Keyword k ->  k
+        | Identifier i -> i
         | _ -> failwith $"Expecting a Keyword or an Identifier token, but received {typeToken}"
-      let varName = match varNameToken with Identifier i -> i | _ -> failwith "Identifier expected here"
+      let varName = getStringFromIdentifierToken varNameToken 
       let symbolTable = SymbolTable.add varName typeName SymbolTable.Arg symbolTable
-      let varNameXml = identifierToXml varNameToken InTable Use symbolTable
-      let newXml = $$"""{{typeXml}}
-{{varNameXml}}"""
-      aux tokens (count + 1) (xml + newXml) symbolTable
+      aux tokens (count + 1) symbolTable
   match tokens with 
-  | [] -> """<parameterList></parameterList>""", symbolTable
-  | _ -> aux tokens 0 "" symbolTable
+  | [] -> symbolTable
+  | _ -> aux tokens 0 symbolTable
         
 let CompileSubroutineBody (tokens: Token list) subroutineIsVoid symbolTable = 
   let tokens = eatIf (isSameToken (Symbol '{')) tokens
@@ -560,7 +551,7 @@ let CompileSubroutineDecs tokens symbolTable =
    // let subroutineNameXml = identifierToXml subroutineNameToken Subroutine Definition symbolTable
     let ts = eatIf (isSameToken (Symbol '(')) ts
     let parameterTokens, ts = advanceUntil (fun x -> x = (Symbol ')')) ts false
-    let parameterXml, symbolTable = CompileParameterList parameterTokens symbolTable 
+    let symbolTable = CompileParameterList parameterTokens symbolTable 
     let ts = eatIf (isSameToken (Symbol ')')) ts
     let subroutineBodyTokens, ts = advanceUntilMatchingBracket (Symbol '{') (Symbol '}') ts true
     let subroutineBodyVm, nOfLocals, symbolTable = CompileSubroutineBody subroutineBodyTokens subroutineIsVoid symbolTable
