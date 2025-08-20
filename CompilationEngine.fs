@@ -7,9 +7,11 @@ open VMWriter
 
 let SPACES_PER_INDENT = 2
 let mutable ticker = 0
+let mutable CLASS_NAME = ""
 
 type Category = Class | Subroutine | InTable
 type Role = Definition | Use
+type SubroutineKind = Function | Method | Constructor
 
 let indent nestingLevel (string: string) = 
   let spaces = String.replicate (nestingLevel * SPACES_PER_INDENT) " "
@@ -192,14 +194,12 @@ let rec CompileTerm (tokens: Token list) symbolTable =
 {{expressionXml}}
 {{tokenToXml (Symbol ']')}}""", remainingTokens
     | Identifier i when tokens.Tail.Head = (Symbol '(') ->
-      let subroutineNameToken, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
-      let subroutineNameXml = identifierToXml subroutineNameToken Subroutine Use symbolTable
+      let methodNameToken, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
+      let fullMethodName = CLASS_NAME + "." + (getStringFromIdentifierToken methodNameToken)  
       let expressionListTokens, tokens = advanceUntilMatchingBracket (Symbol '(') (Symbol ')') tokens false
-      let expressionListXml, count = CompileExpressionList expressionListTokens symbolTable
-      $$"""{{subroutineNameXml}}
-{{tokenToXml (Symbol '(')}}
-{{expressionListXml}}
-{{tokenToXml (Symbol ')')}}""", tokens
+      let expressionListVm, nOfArgs = CompileExpressionList expressionListTokens symbolTable
+      $"{writePush ARG 0}
+{expressionListVm}{writeCall fullMethodName (nOfArgs + 1)}", tokens
     | Identifier classOrVarName when tokens.Tail.Head = (Symbol '.') ->
       let classOrVarNameToken, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
       let tokens = eatIf (isSameToken (Symbol '.')) tokens
@@ -212,7 +212,11 @@ let rec CompileTerm (tokens: Token list) symbolTable =
       | SymbolTable.None ->      
         let fullName = (classOrVarName + "." + subroutineName) 
         $"{expressionListVm}{writeCall fullName nOfExpressions}", tokens
-      | _ -> identifierToXml classOrVarNameToken InTable Use symbolTable, tokens
+      | _ -> 
+        let fullName = (SymbolTable.typeOf classOrVarName symbolTable) + "." + subroutineName
+        let segment, index = getSegmentAndIndex classOrVarNameToken symbolTable
+        $"{writePush segment index}
+{expressionListVm}{writeCall fullName (nOfExpressions + 1)}", tokens
     | Identifier i -> identifierToVm tokens.Head symbolTable, tokens.Tail
     | _ -> failwith ("Unexpected token found in CompileTerm: " + (string tokens.Head))
   innerXml, leftOverTokens
@@ -237,7 +241,7 @@ and CompileExpression tokens symbolTable =
     match tokens with 
     | [] -> ""
     | [a] -> 
-      let term, _ = CompileTerm [a] symbolTable
+      let term, _ = CompileTerm [a]  symbolTable
       term
     | head :: tail  when head = Symbol '(' -> 
       let term, leftOver = CompileTerm tokens symbolTable
@@ -542,7 +546,7 @@ let CompileSubroutineBody (tokens: Token list) subroutineIsVoid symbolTable =
   statementsXml, nOfVarDecs, symbolTable
     
 
-let CompileSubroutineDecs tokens className symbolTable =
+let CompileSubroutineDecs tokens symbolTable =
   let doOneSubroutineDec tokens symbolTable =
     let constructorFunctionMethod, ts = getNextTokenIf (isOneOfTokens [Keyword "constructor"; Keyword "function"; Keyword "method"]) tokens
     let voidOrTypeToken, ts = getNextTokenIf isTypeOrVoid ts
@@ -552,7 +556,7 @@ let CompileSubroutineDecs tokens className symbolTable =
       | Keyword _ | Identifier _ -> false
       | _ -> failwith ("Unexpected token when expecting void or a type: " + (string voidOrTypeToken))
     let subroutineNameToken, ts = getNextTokenIf (isSameType (Identifier "_")) ts
-    let subroutineName = className + "." + (getStringFromIdentifierToken subroutineNameToken)
+    let subroutineName = CLASS_NAME + "." + (getStringFromIdentifierToken subroutineNameToken)
    // let subroutineNameXml = identifierToXml subroutineNameToken Subroutine Definition symbolTable
     let ts = eatIf (isSameToken (Symbol '(')) ts
     let parameterTokens, ts = advanceUntil (fun x -> x = (Symbol ')')) ts false
@@ -577,10 +581,10 @@ let CompileClass tokens =
  let symbolTable = SymbolTable.create()
  let tokens = eatIf (isSameToken (Keyword "class")) tokens
  let classNameToken, tokens = getNextTokenIf ((isSameType (Identifier "_"))) tokens
- let className = getStringFromIdentifierToken classNameToken
+ CLASS_NAME <- getStringFromIdentifierToken classNameToken
  let tokens = eatIf (isSameToken (Symbol '{')) tokens
  let classVarDecs, tokens, symbolTable = CompileClassVarDecs tokens symbolTable
- let classSubroutineDecs, tokens, symbolTable = CompileSubroutineDecs tokens className symbolTable
+ let classSubroutineDecs, tokens, symbolTable = CompileSubroutineDecs tokens symbolTable
  let tokens = eatIf (isSameToken (Symbol '}')) tokens
  classSubroutineDecs
 
