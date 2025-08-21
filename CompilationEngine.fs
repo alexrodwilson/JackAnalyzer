@@ -186,13 +186,14 @@ let rec CompileTerm (tokens: Token list) symbolTable =
       (termVm + "\n" + unaryOpVm), remainingTokens
     | Identifier i when tokens.Tail = [] ->  identifierToVm tokens.Head symbolTable, []
     | Identifier i when tokens.Tail.Head = (Symbol '[') ->
-      let varNameXml = identifierToXml tokens.Head InTable Use symbolTable
+      let arrayNameVm = identifierToVm tokens.Head symbolTable
       let expressionTokens, remainingTokens = advanceUntilMatchingBracket (Symbol '[') (Symbol ']') tokens.Tail false
-      let expressionXml = CompileExpression expressionTokens symbolTable
-      $$"""{{varNameXml}}
-{{tokenToXml (Symbol '[')}}
-{{expressionXml}}
-{{tokenToXml (Symbol ']')}}""", remainingTokens
+      let expressionVm = CompileExpression expressionTokens symbolTable
+      $"{arrayNameVm}
+{expressionVm}
+{writeArithmetic ADD}
+{writePop POINTER 1}
+{writePush THAT 0}", remainingTokens
     | Identifier i when tokens.Tail.Head = (Symbol '(') ->
       let methodNameToken, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
       let fullMethodName = CLASS_NAME + "." + (getStringFromIdentifierToken methodNameToken)  
@@ -302,15 +303,23 @@ and CompileExpressionList tokens symbolTable =
 let CompileLetStatement tokens symbolTable = 
   let tokens = eatIf (isSameToken (Keyword "let")) tokens
   let varNameToken, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
+  let arrayNameVm = identifierToVm varNameToken symbolTable
   match tokens.Head with
   | Symbol s when s = '[' ->
     let expressionTokens, tokens = advanceUntilMatchingBracket (Symbol '[') (Symbol ']') tokens false
     let arrayExpressionVm = CompileExpression expressionTokens symbolTable
     let tokens = eatIf (isSameToken (Symbol '=')) tokens
     let rhsExpressionTokens, remainingTokens = advanceUntil (fun x -> x = (Symbol ';')) tokens false
-    let rhsExpressionXml = CompileExpression rhsExpressionTokens symbolTable
+    let rhsExpressionVm = CompileExpression rhsExpressionTokens symbolTable
     let remainingTokens = eatIf (isSameToken (Symbol ';')) remainingTokens
-    "not implemented yet", remainingTokens
+    $"{arrayNameVm}
+{arrayExpressionVm}
+{writeArithmetic ADD}
+{rhsExpressionVm}
+{writePop TEMP 0}
+{writePop POINTER 1}
+{writePush TEMP 0}
+{writePop THAT 0}", remainingTokens
   | Symbol s when s = '=' ->
     let tokens = eatIf (isSameToken (Symbol '=')) tokens
     let rhsExpressionTokens, remainingTokens = advanceUntil (fun x -> x = (Symbol ';')) tokens false
