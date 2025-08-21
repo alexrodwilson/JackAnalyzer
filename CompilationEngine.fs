@@ -138,7 +138,20 @@ let identifierToXml identifier category role symbolTable =
 </identifier>"""
 
 let stringConstantToVm s =
-  "Not implemented yet"
+ let stringLength = String.length s
+ let loopVm = s 
+              |> Seq.map (fun x -> (int x)) 
+              |> Seq.map (fun x -> 
+              $$"""{{writePush TEMP 0}}
+{{writePush CONST x}}
+{{writeCall "String.appendChar" 2}}""")
+              |> Seq.reduce (fun x y -> x + "\n" + y) 
+ $$"""{{writePush CONST stringLength}}
+{{writeCall "String.new" 1}}
+{{writePop TEMP 0}}
+{{loopVm}}
+{{writePush TEMP 0}}"""
+
 
 let getStringFromIdentifierToken identifier = 
   match identifier with
