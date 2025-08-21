@@ -198,7 +198,7 @@ let rec CompileTerm (tokens: Token list) symbolTable =
       let fullMethodName = CLASS_NAME + "." + (getStringFromIdentifierToken methodNameToken)  
       let expressionListTokens, tokens = advanceUntilMatchingBracket (Symbol '(') (Symbol ')') tokens false
       let expressionListVm, nOfArgs = CompileExpressionList expressionListTokens symbolTable
-      $"{writePush ARG 0}
+      $"{writePush POINTER 0}
 {expressionListVm}{writeCall fullMethodName (nOfArgs + 1)}", tokens
     | Identifier classOrVarName when tokens.Tail.Head = (Symbol '.') ->
       let classOrVarNameToken, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
@@ -350,6 +350,7 @@ let CompileReturnStatement tokens subroutineIsVoid subroutineKind symbolTable =
     | false -> ""
   $"{expressionVm}{voidVm}{constructorVm}
 {writeReturn()}
+
 ", tokens
 
 let rec CompileStatements tokens funcIsVoid subroutineKind symbolTable = 
