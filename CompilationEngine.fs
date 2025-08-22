@@ -94,24 +94,11 @@ let isTypeProgramStructure xs =
 let isTypeOrVoid xs =
   (isTypeProgramStructure xs) || xs.Head = (Keyword "void")
 
-let check test token = 
-  if test token then token
-  else failwith ("Unexpected token found in stream" + (string token))
-
-let maybeGetNextTokenIf test tokens =
-  match tokens with
-  | [] -> failwith "Token stream empty unexpectedly"
-  | head::tail when test tokens -> Some head, tail
-  | _ -> None, tokens
-
 let isOp token = 
   let ops = ['+'; '-'; '*'; '/'; '&'; '|'; '<'; '>';'=']
   match token with
   | Symbol s when (List.contains s ops) -> true
   | _ -> false
-
-let getTokensBeforeOp tokens = 
-  advanceUntil (fun x -> isOp x) tokens false
 
 let identifierToXml identifier category role symbolTable = 
   let name = 
@@ -418,49 +405,33 @@ let CompileVarDecs tokens symbolTable =
   let mutable mutSymbolTable = symbolTable
   let mutable mutNOfLocals = 0
   match tokens with
-  | [] -> "", [], mutNOfLocals, symbolTable
-  | head::tail when head = Symbol '{' && tokens.Tail.Head = Symbol '}' -> "", [], mutNOfLocals, symbolTable
-  | head::tail when head = Symbol '}' && tail = [] -> "", tokens, mutNOfLocals, symbolTable
+  | [] -> [], mutNOfLocals, symbolTable
+  | head::tail when head = Symbol '{' && tokens.Tail.Head = Symbol '}' -> [], mutNOfLocals, symbolTable
+  | head::tail when head = Symbol '}' && tail = [] -> tokens, mutNOfLocals, symbolTable
   | _ -> 
     let patterns, remainingTokens = getConsecutivePatterns (fun x -> x = (Keyword "var")) (fun x -> x = (Symbol ';')) tokens
     let compileOne tokens = 
       let tokens = eatIf (isSameToken (Keyword "var")) tokens
       let typeToken, tokens = getNextTokenIf isTypeProgramStructure tokens
-      let typeXml, typeName = 
+      let typeName = 
         match typeToken with
-        | Keyword k -> (tokenToXml typeToken), k
-        | Identifier i -> (identifierToXml typeToken Class Use mutSymbolTable), i
+        | Keyword k ->  k
+        | Identifier i -> i
         | _ -> failwith $"Expected a Keyword or an Identifier token, but received {typeToken}"
       let varNameToken, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
-      let varName = 
-        match varNameToken with 
-        | Identifier i -> i
-        | _ -> failwith ("WrongToken when variable name expected: " + (string varNameToken))
+      let varName = getStringFromIdentifierToken varNameToken 
       mutSymbolTable <- SymbolTable.add varName typeName SymbolTable.Var mutSymbolTable
       mutNOfLocals <- mutNOfLocals + 1
       let identifierTokens = tokens |> List.filter (fun x -> match x with
                                                              | Identifier _ -> true
                                                              | _ -> false)
       for token in identifierTokens do
-        let name = match token with | Identifier i -> i | _ -> failwith ("WrongToken when expecting only identifiers: " + (string token))
+        let name = getStringFromIdentifierToken token 
         mutSymbolTable <- SymbolTable.add name typeName SymbolTable.Var mutSymbolTable
         mutNOfLocals <- mutNOfLocals + 1
-      let varNameXml = identifierToXml varNameToken InTable Definition mutSymbolTable
-      let otherVarsXml =  
-        tokens 
-        |> List.map (fun x -> match x with
-                              | Identifier _ -> identifierToXml x InTable Definition mutSymbolTable
-                              | _ -> tokenToXml x)
-        |> List.fold (fun x y -> x + "\n" + y) ""
-      $$"""<varDec>
-{{indent 1 "<keyword> var </keyword>"}}
-{{indent 1  typeXml}}
-{{indent 1 varNameXml}}{{indent 1 otherVarsXml}} 
-</varDec>"""
-    
-    patterns |> List.map compileOne
-             |> List.fold (fun x y -> x + "\n" + y) "", remainingTokens, mutNOfLocals,  mutSymbolTable
-
+    for pattern in patterns do
+      compileOne pattern
+    remainingTokens, mutNOfLocals,  mutSymbolTable
 
 
 let CompileClassVarDecs tokens symbolTable = 
@@ -530,7 +501,7 @@ let CompileParameterList tokens symbolTable = //SymbolTable.add varName typeName
         
 let CompileSubroutineBody (tokens: Token list) subroutineIsVoid subroutineKind symbolTable = 
   let tokens = eatIf (isSameToken (Symbol '{')) tokens
-  let varDecsXml, tokens, nOfVarDecs, symbolTable = CompileVarDecs tokens symbolTable
+  let tokens, nOfVarDecs, symbolTable = CompileVarDecs tokens symbolTable
   let statementsXml, tokens = CompileStatements tokens subroutineIsVoid subroutineKind symbolTable
   let tokens = eatIf (isSameToken (Symbol '}')) tokens
   let symbolTable = SymbolTable.wipeSubroutineSymbols symbolTable
