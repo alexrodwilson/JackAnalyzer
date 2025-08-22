@@ -36,11 +36,7 @@ let advanceUntil test tokens returnLastToken =
 let advanceUntilMatchingBracket openingBracket closingBracket tokens includeBrackets = 
   let rec aux toReturn remainingTokens lbs rbs = 
     match remainingTokens with
-    | [] -> 
-      printfn "toReturn: %A"  toReturn
-      printfn ""
-      printfn "remainingTokens: %A" remainingTokens
-      failwith ("No matching bracket found")
+    | [] ->  failwith ("No matching bracket found")
     | head::tail when head = openingBracket -> aux (head::toReturn) tail (lbs + 1) rbs
     | head::tail when head = closingBracket && (lbs = rbs + 1) ->
       match includeBrackets with
@@ -146,15 +142,12 @@ let stringConstantToVm s =
  let loopVm = s 
               |> Seq.map (fun x -> (int x)) 
               |> Seq.map (fun x -> 
-              $$"""{{writePush TEMP 0}}
-{{writePush CONST x}}
+              $$"""{{writePush CONST x}}
 {{writeCall "String.appendChar" 2}}""")
               |> Seq.reduce (fun x y -> x + "\n" + y) 
  $$"""{{writePush CONST stringLength}}
 {{writeCall "String.new" 1}}
-{{writePop TEMP 0}}
-{{loopVm}}
-{{writePush TEMP 0}}"""
+{{loopVm}}"""
 
 
 let getStringFromIdentifierToken identifier = 
@@ -239,66 +232,6 @@ let rec CompileTerm (tokens: Token list) symbolTable =
     | _ -> failwith ("Unexpected token found in CompileTerm: " + (string tokens.Head))
   innerXml, leftOverTokens
 
-(*and CompileExpression tokens symbolTable =
-  let opToVm token =
-    match token with
-    | Symbol s -> 
-      match s with 
-      | '*' -> writeCall "Math.multiply" 2
-      | '/' -> writeCall "Math.divide" 2
-      | '+' -> writeArithmetic ADD 
-      | '-' -> writeArithmetic SUB
-      | '=' -> writeArithmetic EQ
-      | '>' -> writeArithmetic GT
-      | '<' -> writeArithmetic LT
-      | '&' -> writeArithmetic AND
-      | '|' -> writeArithmetic OR
-      | '~' -> writeArithmetic NEG
-      | _ -> failwith ("Unexpected symbol where operator expected: " + (string s))
-  let rec aux tokens expectingTerm =
-    match tokens with 
-    | [] -> ""
-    | [a] -> 
-      let term, _ = CompileTerm [a]  symbolTable
-      term
-    | head :: tail  when head = Symbol '(' -> 
-      let term, leftOver = CompileTerm tokens symbolTable
-      match leftOver with 
-      | [] -> term
-      | head :: tail -> 
-        let bVm = opToVm leftOver.Head
-        let cVm, tokens = CompileTerm leftOver.Tail symbolTable
-        $"{term}
-{cVm}
-{bVm}" + "\n" + (aux tokens false)
-    | head :: tail  when not (isOp head) -> 
-      let aVm, tokens = CompileTerm tokens symbolTable
-      match tokens with
-      | [] -> aVm
-      | head :: tail -> 
-        let bVm = opToVm tokens.Head
-        let cVm, tokens = CompileTerm tokens.Tail symbolTable
-        $"{aVm}
-{cVm}
-{bVm}" + "\n" + (aux tokens false)
-    | head :: tail when (isOp head) ->
-      match expectingTerm with
-      | true -> 
-        let unaryTerm, leftOvers = CompileTerm tokens symbolTable
-        match leftOvers with
-        | [] -> unaryTerm
-        | head :: tail -> 
-          let bVm = opToVm leftOvers.Head
-          let cVm, leftOvers = CompileTerm leftOvers.Tail symbolTable
-          $"{unaryTerm}
-{cVm}
-{bVm}" + "\n" + (aux leftOvers false)
-      | false -> 
-        let opVm = opToVm head
-        let termVm, tokens = CompileTerm tail symbolTable
-        $"{termVm}
-{opVm}" + "\n" + (aux tokens false)
-  aux tokens true*) 
 and CompileExpression tokens symbolTable =
   let opToVm token =
     match token with
@@ -325,16 +258,16 @@ and CompileExpression tokens symbolTable =
 {op}
 "  
       aux tokens vm
-  let res =
-    match tokens with
-      | [] -> ""
-      | head :: tail  -> 
-        let firstTerm, tokens = CompileTerm tokens symbolTable
-        match tokens with 
-        | [] -> firstTerm
-        | head :: tail -> 
-           (aux tokens (firstTerm + "\n"))
-  removeBlankLines res
+  
+  match tokens with
+    | [] -> ""
+    | head :: tail  -> 
+      let firstTerm, tokens = CompileTerm tokens symbolTable
+      match tokens with 
+      | [] -> firstTerm
+      | head :: tail -> 
+         (aux tokens (firstTerm + "\n"))
+
 
 and CompileExpressionList tokens symbolTable = 
   let rec aux remainingTokens vm count expectingExpression =
@@ -350,7 +283,7 @@ and CompileExpressionList tokens symbolTable =
     | head::tail -> failwith ("Unexpected input to expressionList" + (string head))
   let vm, count = aux tokens "" 0 true
   match vm with
-  | "" -> vm, count 
+  | "" -> "", count 
   | _ -> "\n" + vm, count
   
 let CompileLetStatement tokens symbolTable = 
@@ -380,8 +313,7 @@ let CompileLetStatement tokens symbolTable =
     let remainingTokens = eatIf (isSameToken (Symbol ';')) remainingTokens
     let segment, index = getSegmentAndIndex varNameToken  symbolTable
     $"{rhsExpressionVm}
-{writePop segment index}
-"   , remainingTokens
+{writePop segment index}", remainingTokens
   | _ -> failwith("Unexpected token found when compiling let statement, expecting '[' or '=': " + (string tokens.Head))
 
 let CompileDoStatement tokens symbolTable =
@@ -390,8 +322,7 @@ let CompileDoStatement tokens symbolTable =
   let subroutineCallXml, notNeeded = CompileTerm subroutineCallTokens symbolTable
   let tokens = eatIf (isSameToken (Symbol ';')) tokens
   $"{subroutineCallXml}
-{writePop TEMP 0}
-", tokens
+{writePop TEMP 0}", tokens
 
 let CompileReturnStatement tokens subroutineIsVoid subroutineKind symbolTable = 
   let tokens = eatIf (isSameToken (Keyword "return")) tokens
@@ -400,20 +331,16 @@ let CompileReturnStatement tokens subroutineIsVoid subroutineKind symbolTable =
     match expressionTokens with 
     | [] -> ""
     | _ -> CompileExpression expressionTokens symbolTable 
+  let expressionVmFinal = 
+    match expressionVm with
+    | "" -> ""
+    | _ -> expressionVm + "\n" 
   let tokens = eatIf (isSameToken (Symbol ';')) tokens
-  let constructorVm =
-    match subroutineKind with
-    | Constructor -> ""
-//{writePush POINTER 0}"
-    | Function | Method -> ""
   let voidVm = 
     match subroutineIsVoid with
-    | true -> "\n" + (writePush CONST 0)
+    | true -> (writePush CONST 0) + "\n"
     | false -> ""
-  $"{expressionVm}{voidVm}{constructorVm}
-{writeReturn()}
-
-", tokens
+  $"{expressionVmFinal}{voidVm}{writeReturn()}", tokens
 
 let rec CompileStatements tokens funcIsVoid subroutineKind symbolTable = 
   let rec aux tokens xml =
@@ -422,21 +349,22 @@ let rec CompileStatements tokens funcIsVoid subroutineKind symbolTable =
     | head::tail when head = Symbol '}' -> xml, tokens 
     | head::tail when head = (Keyword "let") -> 
       let letStatementXml, tokens = CompileLetStatement tokens symbolTable
-      aux tokens (xml + letStatementXml)
+      aux tokens (xml + "\n" + letStatementXml)
     | head::tail when head = (Keyword "do") ->
       let doStatementXml, tokens = CompileDoStatement tokens symbolTable
-      aux tokens (xml + doStatementXml)
+      aux tokens (xml + "\n" + doStatementXml)
     | head::tail when head = (Keyword "return") ->
       let returnStatementXml, tokens = CompileReturnStatement tokens funcIsVoid subroutineKind symbolTable
-      aux tokens (xml + returnStatementXml)
+      aux tokens (xml + "\n" + returnStatementXml)
     | head::tail when head = (Keyword "if") ->
       let ifStatementXml, tokens = CompileIfStatement tokens funcIsVoid subroutineKind symbolTable
-      aux tokens (xml + ifStatementXml)
+      aux tokens (xml + "\n" + ifStatementXml)
     | head::tail when head = (Keyword "while") ->
       let whileStatementXml, tokens = CompileWhileStatement tokens funcIsVoid subroutineKind symbolTable
-      aux tokens (xml + whileStatementXml)
+      aux tokens (xml + "\n" + whileStatementXml)
     | head::tail -> failwith ("Unexpected token in CompileStatements" + (string head))
   aux tokens ""
+  
 
 and CompileIfStatement tokens isVoidFunc subroutineKind symbolTable =
   let label1 = "IF_FALSE_" + (string ticker)
@@ -456,14 +384,17 @@ and CompileIfStatement tokens isVoidFunc subroutineKind symbolTable =
     $"{conditionVm}
 {writeArithmetic NOT}
 {writeIf label1}
-{conditionTrueStatementsVm}{writeGoto label2}
+{conditionTrueStatementsVm}
+{writeGoto label2}
 {writeLabel label1}
-{conditionFalseStatementsVm}{writeLabel label2}" + "\n", tokens 
+{conditionFalseStatementsVm}
+{writeLabel label2}", tokens 
   | _ ->  
     $"{conditionVm}
 {writeArithmetic NOT}
 {writeIf label1}
-{conditionTrueStatementsVm}{writeLabel label1}" + "\n", tokens 
+{conditionTrueStatementsVm}
+{writeLabel label1}", tokens 
 
 and CompileWhileStatement tokens isVoidFunc subroutineKind symbolTable = 
   let label1 = "WHILE_TRUE_" + (string ticker)
@@ -479,9 +410,9 @@ and CompileWhileStatement tokens isVoidFunc subroutineKind symbolTable =
 {expressionVm}
 {writeArithmetic NOT}
 {writeIf label2}
-{statementsVm}{writeGoto label1}
-{writeLabel label2}
-", tokens 
+{statementsVm}
+{writeGoto label1}
+{writeLabel label2}", tokens 
 
 let CompileVarDecs tokens symbolTable =
   let mutable mutSymbolTable = symbolTable
@@ -605,7 +536,6 @@ let CompileSubroutineBody (tokens: Token list) subroutineIsVoid subroutineKind s
   let symbolTable = SymbolTable.wipeSubroutineSymbols symbolTable
   statementsXml, nOfVarDecs, symbolTable
     
-
 let CompileSubroutineDecs tokens symbolTable =
   let doOneSubroutineDec tokens symbolTable =
     let constructorFunctionMethod, ts = getNextTokenIf (isOneOfTokens [Keyword "constructor"; Keyword "function"; Keyword "method"]) tokens
@@ -651,7 +581,7 @@ let CompileSubroutineDecs tokens symbolTable =
     match remainingTokens with
     | head::tail when head = Keyword "constructor" || head = Keyword "function" || head = Keyword "method" -> 
       let oneDecXml, remainingTokens, symbolTable = doOneSubroutineDec remainingTokens symbolTable
-      let xml = xml + oneDecXml
+      let xml = xml + "\n" + oneDecXml
       aux remainingTokens xml symbolTable
     | _ -> xml, remainingTokens, symbolTable
   aux tokens "" symbolTable
@@ -666,7 +596,7 @@ let CompileClass tokens =
  let classVarDecs, tokens, symbolTable = CompileClassVarDecs tokens symbolTable
  let classSubroutineDecs, tokens, symbolTable = CompileSubroutineDecs tokens symbolTable
  let tokens = eatIf (isSameToken (Symbol '}')) tokens
- classSubroutineDecs
+ removeBlankLines classSubroutineDecs
 
 let classTokens = [
   Keyword "class";
