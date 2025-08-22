@@ -13,6 +13,10 @@ type Category = Class | Subroutine | InTable
 type Role = Definition | Use
 type SubroutineKind = Function | Method | Constructor 
 
+let removeBlankLines (s: string) = 
+  s.Split ('\n') |> Seq.filter (fun x -> x <> "")
+                 |> String.concat "\n" 
+
 let indent nestingLevel (string: string) = 
   let spaces = String.replicate (nestingLevel * SPACES_PER_INDENT) " "
   let s = string.Replace("\n", "\n" + spaces)
@@ -235,7 +239,7 @@ let rec CompileTerm (tokens: Token list) symbolTable =
     | _ -> failwith ("Unexpected token found in CompileTerm: " + (string tokens.Head))
   innerXml, leftOverTokens
 
-and CompileExpression tokens symbolTable =
+(*and CompileExpression tokens symbolTable =
   let opToVm token =
     match token with
     | Symbol s -> 
@@ -266,7 +270,7 @@ and CompileExpression tokens symbolTable =
         let cVm, tokens = CompileTerm leftOver.Tail symbolTable
         $"{term}
 {cVm}
-{bVm}" + (aux tokens false)
+{bVm}" + "\n" + (aux tokens false)
     | head :: tail  when not (isOp head) -> 
       let aVm, tokens = CompileTerm tokens symbolTable
       match tokens with
@@ -276,7 +280,7 @@ and CompileExpression tokens symbolTable =
         let cVm, tokens = CompileTerm tokens.Tail symbolTable
         $"{aVm}
 {cVm}
-{bVm}" + (aux tokens false)
+{bVm}" + "\n" + (aux tokens false)
     | head :: tail when (isOp head) ->
       match expectingTerm with
       | true -> 
@@ -288,13 +292,49 @@ and CompileExpression tokens symbolTable =
           let cVm, leftOvers = CompileTerm leftOvers.Tail symbolTable
           $"{unaryTerm}
 {cVm}
-{bVm}" + (aux leftOvers false)
+{bVm}" + "\n" + (aux leftOvers false)
       | false -> 
         let opVm = opToVm head
         let termVm, tokens = CompileTerm tail symbolTable
         $"{termVm}
-{opVm}" + (aux tokens false)
-  aux tokens true 
+{opVm}" + "\n" + (aux tokens false)
+  aux tokens true*) 
+and CompileExpression tokens symbolTable =
+  let opToVm token =
+    match token with
+    | Symbol s ->
+      match s with 
+      | '*' -> writeCall "Math.multiply" 2 
+      | '/' -> writeCall "Math.divide" 2 
+      | '+' -> writeArithmetic ADD 
+      | '-' -> writeArithmetic SUB
+      | '=' -> writeArithmetic EQ
+      | '>' -> writeArithmetic GT
+      | '<' -> writeArithmetic LT
+      | '&' -> writeArithmetic AND
+      | '|' -> writeArithmetic OR
+      | '~' -> writeArithmetic NEG
+      | _ -> failwith ("Unexpected symbol where operator expected: " + (string s))
+  let rec aux tokens vm =
+    match tokens with
+    | [] -> vm
+    | head :: tail -> 
+      let op = opToVm head
+      let term, tokens = CompileTerm tail symbolTable
+      let vm = vm + $"{term}
+{op}
+"  
+      aux tokens vm
+  let res =
+    match tokens with
+      | [] -> ""
+      | head :: tail  -> 
+        let firstTerm, tokens = CompileTerm tokens symbolTable
+        match tokens with 
+        | [] -> firstTerm
+        | head :: tail -> 
+           (aux tokens (firstTerm + "\n"))
+  removeBlankLines res
 
 and CompileExpressionList tokens symbolTable = 
   let rec aux remainingTokens vm count expectingExpression =
@@ -824,6 +864,9 @@ let st = SymbolTable.add "HEIGHT" "int" SymbolTable.Static ( SymbolTable.add "b"
 //printfn "%A" (CompileExpressionList [IntConstant 8001; Symbol ','; IntConstant 16; Symbol ','; IntConstant -1] st)
 //printfn ""
 //printfn "%A" (CompileExpressionList [IntConstant 2] st)
+printfn "%A" (CompileExpression [Symbol '('; IntConstant 1; Symbol '*'; IntConstant 3; Symbol ')'; Symbol '+'; IntConstant 2] st)
+printfn ""
+printfn "%A" (CompileExpression [Symbol '-'; IntConstant 1; Symbol '+'; IntConstant 4] st)
 printfn ""
 printfn "%A" (CompileExpression [IntConstant 2; Symbol '+'; IntConstant 5; Symbol '+'; IntConstant 1] st)
 printfn ""
@@ -843,7 +886,7 @@ printfn "%A" (CompileTerm [Symbol '-'; IntConstant 1] st)
 printfn ""
 printfn "%A" (CompileExpression [ Symbol '('; IntConstant 69; Symbol '+'; IntConstant 33;  Symbol ')'; Symbol '+'; IntConstant 42] st)
 printfn ""
-printfn "%A" (CompileExpressionList [IntConstant 33; Symbol ','; IntConstant 22; Symbol '+'; IntConstant 39; Symbol ','; Symbol '('; IntConstant 2; Symbol '+'; IntConstant 1; Symbol ')'] st)
+//printfn "%A" (CompileExpressionList [IntConstant 33; Symbol ','; IntConstant 22; Symbol '+'; IntConstant 39; Symbol ','; Symbol '('; IntConstant 2; Symbol '+'; IntConstant 1; Symbol ')'] st)
 printfn ""
 printfn "%A" (CompileExpression [Symbol '-'; IntConstant 1; Symbol '+'; IntConstant 3] st)
 printfn ""
