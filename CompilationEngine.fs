@@ -440,43 +440,31 @@ let CompileClassVarDecs tokens symbolTable =
   let doOneDec listOfTokens =
     let staticOrField, listOfTokens = getNextTokenIf (isOneOfTokens [(Keyword "static"); (Keyword "field")]) listOfTokens 
     let typeToken, listOfTokens = getNextTokenIf isTypeProgramStructure listOfTokens
-    let typeXml, typeName = 
+    let typeName = 
       match typeToken with
-      | Keyword k -> tokenToXml typeToken, k
-      | Identifier i -> identifierToXml typeToken Class Use mutSymbolTable, i
+      | Keyword k ->  k
+      | Identifier i -> i
       | _ -> failwith $"Expected a Keyword or an Identifier token, but received {typeToken}"
     let varNameToken, listOfTokens = getNextTokenIf  (isSameType (Identifier "_")) listOfTokens
-    let varName = match varNameToken with | Identifier i -> i | _ -> failwith "Should not reach here"
+    let varName = getStringFromIdentifierToken varNameToken 
     let varKind =
       match staticOrField with
       | Keyword "static" -> SymbolTable.Static
       | Keyword "field" -> SymbolTable.Field
       | _ -> failwith ("Incorrect token found where expected static or field: " + (string staticOrField))
     mutSymbolTable <- SymbolTable.add varName typeName varKind mutSymbolTable
-    let varNameXml = identifierToXml varNameToken InTable Definition mutSymbolTable
     let identifierTokens = listOfTokens |> List.filter (fun x -> match x with 
                                                                  | Identifier _ -> true
                                                                  | _ -> false)
     for token in identifierTokens do
-      let name = match token with | Identifier i -> i | _ -> failwith ("Wrong token found where identifier should be: " + (string token))
+      let name = getStringFromIdentifierToken token 
       mutSymbolTable <- SymbolTable.add name typeName varKind mutSymbolTable
-    let otherVarsXml = listOfTokens |> List.map (fun x -> match x with
-                                                          | Identifier _ -> identifierToXml x InTable Definition mutSymbolTable
-                                                          | _ -> tokenToXml x)
-                                    |> List.reduce (fun x y -> x + "\n" + y)
-    $$"""<classVarDec>
-{{indent 1 (tokenToXml staticOrField)}}
-{{indent 1  typeXml}}
-{{indent 1 varNameXml}}
-{{indent 1 otherVarsXml}}
-</classVarDec>"""
   match classVarDecPatterns with
-  | [] -> "", remainingTokens, mutSymbolTable
+  | [] -> remainingTokens, mutSymbolTable
   | _ ->
-    let xml = classVarDecPatterns
-              |> List.map doOneDec
-              |> List.reduce (fun x y -> x + "\n" + y) 
-    xml, remainingTokens, mutSymbolTable
+    for pattern in classVarDecPatterns do
+      doOneDec pattern
+    remainingTokens, mutSymbolTable
 
 
 let CompileParameterList tokens symbolTable = //SymbolTable.add varName typeName varKind mutSymbolTable
@@ -564,7 +552,7 @@ let CompileClass tokens =
  let classNameToken, tokens = getNextTokenIf ((isSameType (Identifier "_"))) tokens
  CLASS_NAME <- getStringFromIdentifierToken classNameToken
  let tokens = eatIf (isSameToken (Symbol '{')) tokens
- let classVarDecs, tokens, symbolTable = CompileClassVarDecs tokens symbolTable
+ let tokens, symbolTable = CompileClassVarDecs tokens symbolTable
  let classSubroutineDecs, tokens, symbolTable = CompileSubroutineDecs tokens symbolTable
  let tokens = eatIf (isSameToken (Symbol '}')) tokens
  removeBlankLines classSubroutineDecs
