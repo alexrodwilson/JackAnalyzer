@@ -1,7 +1,4 @@
 module CompilationEngine
-//#load "Tokenizer.fs"
-//#load "SymbolTable.fs"
-//#load "VMWriter.fs"
 open Tokenizer
 open VMWriter
 
@@ -100,30 +97,6 @@ let isOp token =
   | Symbol s when (List.contains s ops) -> true
   | _ -> false
 
-let identifierToXml identifier category role symbolTable = 
-  let name = 
-    match identifier with
-    | Identifier i -> i
-    | _ -> failwith ("Wrong token passed to identifierToXml: " + (string identifier))
-  let cat = 
-    match category with
-    | Class | Subroutine -> string category
-    | InTable -> string (SymbolTable.kindOf name symbolTable)
-  let index = 
-    match category with
-    | Class | Subroutine -> "None"
-    | InTable -> string (SymbolTable.indexOf name symbolTable)
-  let nameXml = $$"""<name> {{name}} </name>"""
-  let categoryXml = $$"""<category> {{cat}} </category>"""
-  let roleXml = $$"""<role> {{role}} </role>"""
-  let indexXml = $$"""<index> {{index}} </index>"""
-  $$"""<identifier>
-{{indent 1 nameXml}}
-{{indent 1 categoryXml}}
-{{indent 1 roleXml}}
-{{indent 1 indexXml}}
-</identifier>"""
-
 let stringConstantToVm s =
  let stringLength = String.length s
  let loopVm = s 
@@ -160,7 +133,7 @@ let identifierToVm token symbolTable =
    writePush segment index
 
 let rec CompileTerm (tokens: Token list) symbolTable = 
-  let innerXml, leftOverTokens =
+  let innerVm, leftOverTokens =
     match tokens.Head with
     | IntConstant i ->  writePush CONST i, tokens.Tail
     | StringConstant s ->  (stringConstantToVm s), tokens.Tail
@@ -170,6 +143,7 @@ let rec CompileTerm (tokens: Token list) symbolTable =
       | "false" | "null" -> writePush CONST 0, tokens.Tail
       | "true" -> $"{writePush CONST 1}
 {writeArithmetic NEG}", tokens.Tail
+      | _ -> failwith ("Expecting keywords this, false or true but got: " + k)
     | Symbol s when s = '(' -> 
       let expressionTokens, remainingTokens = advanceUntilMatchingBracket (Symbol '(') (Symbol ')') tokens false 
       let expressionVM = CompileExpression expressionTokens symbolTable
@@ -179,6 +153,7 @@ let rec CompileTerm (tokens: Token list) symbolTable =
        match s with
         | '-' -> writeArithmetic NEG 
         | '~' -> writeArithmetic NOT
+        | _ -> failwith ("Expected unary operators - or ~ here but got: " + (string s))
       let termVm, remainingTokens = CompileTerm tokens.Tail symbolTable
       (termVm + "\n" + unaryOpVm), remainingTokens
     | Identifier i when tokens.Tail = [] ->  identifierToVm tokens.Head symbolTable, []
@@ -203,7 +178,6 @@ let rec CompileTerm (tokens: Token list) symbolTable =
       let tokens = eatIf (isSameToken (Symbol '.')) tokens
       let subroutineNameToken, tokens = getNextTokenIf (isSameType (Identifier "_")) tokens
       let subroutineName = getStringFromIdentifierToken subroutineNameToken
-     // let subroutineNameXml = identifierToXml subroutineNameToken Subroutine Use symbolTable
       let expressionListTokens, tokens = advanceUntilMatchingBracket (Symbol '(') (Symbol ')') tokens false
       let expressionListVm, nOfExpressions = CompileExpressionList expressionListTokens symbolTable
       match (SymbolTable.kindOf classOrVarName symbolTable) with
@@ -217,7 +191,7 @@ let rec CompileTerm (tokens: Token list) symbolTable =
 {expressionListVm}{writeCall fullName (nOfExpressions + 1)}", tokens
     | Identifier i -> identifierToVm tokens.Head symbolTable, tokens.Tail
     | _ -> failwith ("Unexpected token found in CompileTerm: " + (string tokens.Head))
-  innerXml, leftOverTokens
+  innerVm, leftOverTokens
 
 and CompileExpression tokens symbolTable =
   let opToVm token =
@@ -235,6 +209,7 @@ and CompileExpression tokens symbolTable =
       | '|' -> writeArithmetic OR
       | '~' -> writeArithmetic NEG
       | _ -> failwith ("Unexpected symbol where operator expected: " + (string s))
+    | _ -> failwith ("Expected an operator Symbol but got: " + (string token))
   let rec aux tokens vm =
     match tokens with
     | [] -> vm
@@ -306,9 +281,9 @@ let CompileLetStatement tokens symbolTable =
 let CompileDoStatement tokens symbolTable =
   let tokens = eatIf (isSameToken (Keyword "do")) tokens
   let subroutineCallTokens, tokens = advanceUntil (fun x -> x = (Symbol ';')) tokens false
-  let subroutineCallXml, notNeeded = CompileTerm subroutineCallTokens symbolTable
+  let subroutineCallVm, notNeeded = CompileTerm subroutineCallTokens symbolTable
   let tokens = eatIf (isSameToken (Symbol ';')) tokens
-  $"{subroutineCallXml}
+  $"{subroutineCallVm}
 {writePop TEMP 0}", tokens
 
 let CompileReturnStatement tokens subroutineIsVoid subroutineKind symbolTable = 
@@ -330,25 +305,25 @@ let CompileReturnStatement tokens subroutineIsVoid subroutineKind symbolTable =
   $"{expressionVmFinal}{voidVm}{writeReturn()}", tokens
 
 let rec CompileStatements tokens funcIsVoid subroutineKind symbolTable = 
-  let rec aux tokens xml =
+  let rec aux tokens vm =
     match tokens with
-    | [] -> xml, tokens 
-    | head::tail when head = Symbol '}' -> xml, tokens 
+    | [] -> vm, tokens 
+    | head::tail when head = Symbol '}' -> vm, tokens 
     | head::tail when head = (Keyword "let") -> 
-      let letStatementXml, tokens = CompileLetStatement tokens symbolTable
-      aux tokens (xml + "\n" + letStatementXml)
+      let letStatementVm, tokens = CompileLetStatement tokens symbolTable
+      aux tokens (vm + "\n" + letStatementVm)
     | head::tail when head = (Keyword "do") ->
-      let doStatementXml, tokens = CompileDoStatement tokens symbolTable
-      aux tokens (xml + "\n" + doStatementXml)
+      let doStatementVm, tokens = CompileDoStatement tokens symbolTable
+      aux tokens (vm + "\n" + doStatementVm)
     | head::tail when head = (Keyword "return") ->
-      let returnStatementXml, tokens = CompileReturnStatement tokens funcIsVoid subroutineKind symbolTable
-      aux tokens (xml + "\n" + returnStatementXml)
+      let returnStatementVm, tokens = CompileReturnStatement tokens funcIsVoid subroutineKind symbolTable
+      aux tokens (vm + "\n" + returnStatementVm)
     | head::tail when head = (Keyword "if") ->
-      let ifStatementXml, tokens = CompileIfStatement tokens funcIsVoid subroutineKind symbolTable
-      aux tokens (xml + "\n" + ifStatementXml)
+      let ifStatementVm, tokens = CompileIfStatement tokens funcIsVoid subroutineKind symbolTable
+      aux tokens (vm + "\n" + ifStatementVm)
     | head::tail when head = (Keyword "while") ->
-      let whileStatementXml, tokens = CompileWhileStatement tokens funcIsVoid subroutineKind symbolTable
-      aux tokens (xml + "\n" + whileStatementXml)
+      let whileStatementVm, tokens = CompileWhileStatement tokens funcIsVoid subroutineKind symbolTable
+      aux tokens (vm + "\n" + whileStatementVm)
     | head::tail -> failwith ("Unexpected token in CompileStatements" + (string head))
   aux tokens ""
   
@@ -490,10 +465,10 @@ let CompileParameterList tokens symbolTable = //SymbolTable.add varName typeName
 let CompileSubroutineBody (tokens: Token list) subroutineIsVoid subroutineKind symbolTable = 
   let tokens = eatIf (isSameToken (Symbol '{')) tokens
   let tokens, nOfVarDecs, symbolTable = CompileVarDecs tokens symbolTable
-  let statementsXml, tokens = CompileStatements tokens subroutineIsVoid subroutineKind symbolTable
+  let statementsVm, tokens = CompileStatements tokens subroutineIsVoid subroutineKind symbolTable
   let tokens = eatIf (isSameToken (Symbol '}')) tokens
   let symbolTable = SymbolTable.wipeSubroutineSymbols symbolTable
-  statementsXml, nOfVarDecs, symbolTable
+  statementsVm, nOfVarDecs, symbolTable
     
 let CompileSubroutineDecs tokens symbolTable =
   let doOneSubroutineDec tokens symbolTable =
@@ -516,7 +491,6 @@ let CompileSubroutineDecs tokens symbolTable =
       match subroutineKind with
       | Method -> SymbolTable.add "this" CLASS_NAME SymbolTable.Arg symbolTable
       | Function | Constructor -> symbolTable
-   // let subroutineNameXml = identifierToXml subroutineNameToken Subroutine Definition symbolTable
     let ts = eatIf (isSameToken (Symbol '(')) ts
     let parameterTokens, ts = advanceUntil (fun x -> x = (Symbol ')')) ts false
     let symbolTable = CompileParameterList parameterTokens symbolTable 
@@ -536,13 +510,13 @@ let CompileSubroutineDecs tokens symbolTable =
     let vm = $"{(writeFunction subroutineName nOfLocals)}{subroutineExtraVm}
 {subroutineBodyVm}"
     vm, ts, symbolTable
-  let rec aux remainingTokens xml symbolTable =
+  let rec aux remainingTokens vm symbolTable =
     match remainingTokens with
     | head::tail when head = Keyword "constructor" || head = Keyword "function" || head = Keyword "method" -> 
-      let oneDecXml, remainingTokens, symbolTable = doOneSubroutineDec remainingTokens symbolTable
-      let xml = xml + "\n" + oneDecXml
-      aux remainingTokens xml symbolTable
-    | _ -> xml, remainingTokens, symbolTable
+      let oneDecVm, remainingTokens, symbolTable = doOneSubroutineDec remainingTokens symbolTable
+      let vm = vm + "\n" + oneDecVm
+      aux remainingTokens vm symbolTable
+    | _ -> vm, remainingTokens, symbolTable
   aux tokens "" symbolTable
 
 
@@ -557,306 +531,4 @@ let CompileClass tokens =
  let tokens = eatIf (isSameToken (Symbol '}')) tokens
  removeBlankLines classSubroutineDecs
 
-let classTokens = [
-  Keyword "class";
-  Identifier "Main";
-  Symbol '{';
-  Symbol '}';
-]
-let testTokens = [
-  Keyword "var";
-  Keyword "int";
-  Identifier "i"
-  Symbol ',';
-  Identifier "j"
-  Symbol ';';
-  Keyword "var";
-  Keyword "String";
-  Identifier "s";
-  Symbol ';'
- ]
 
-let testTokens2 = [
-  Symbol '}';
-  Identifier "doggo";
-  Keyword "null";
-]
-
-let classVarDecsTest = [
-  Keyword "static";
-  Keyword "boolean";
-  Identifier "b";
-  Symbol ','; 
-  Identifier "test2";
-  Symbol ';';
-  Keyword "static";
-  Keyword "int";
-  Identifier "i";
-  Symbol ',';
-  Identifier "p";
-  Symbol ';'
-]
-
-
-let oneSubroutineTest = [
-  Keyword "function";
-  Keyword "void";
-  Identifier "more";
-  Symbol '(';
-  Symbol ')';
-  Symbol '{';
-  Symbol '}';
-]
-let curlyBracketsTest = [
-  Symbol '{';
-  Keyword "toast";
-  Symbol '{';
-  Identifier "dogloose";
-  Symbol '}'
-  Symbol ';';
-  Symbol '}';
-  Keyword "int";
-  Symbol '}'
-]
-let curlyBracketsTest2 = [
-  Symbol '{';
-  Symbol '}';
-  Keyword "pooch"
-]
-
-let paramTest = [
-  Identifier "Point";
-  Identifier "p";
-  Symbol ',';
-  Keyword "int";
-  Identifier "i";
-  Symbol ',';
-  Keyword "boolean";
-  Identifier "b";
-]
-
-let paramTest2 = [
-  Keyword "int";
-  Identifier "i"
-]
-
-let paramTest1 = []
-
-let varDecsTest = [Keyword "var"; Keyword "int"; Identifier "i"; Symbol ','; Identifier "j"; Symbol ';'; 
-  Keyword "var"; Identifier "String"; Identifier "s"; Symbol ';']
-let varDecsTest2 = [Keyword "var"; Keyword "int"; Identifier "i"; Symbol ','; Identifier "j"; Symbol ';']
-let letTest = [Keyword "let"; Identifier "x"; Symbol '='; IntConstant 2; Symbol '+'; IntConstant 3; Symbol ';']
-let letTest2 = [Keyword "let"; Identifier "foo"; Symbol '['; IntConstant 5; Symbol '-'; IntConstant 2; Symbol ']'; Symbol '='; StringConstant "dog"; Symbol ';']
-let expressionTest1 = [IntConstant 2]
-let expressionTest2 = [IntConstant 2; Symbol '+'; IntConstant 20]
-//let expressionTest3 = [Identifier "things"; Symbol '['; IntConstant 4; Symbol ']']
-let termTest1  = [Symbol '-'; IntConstant 10]
-let termTest2 = [Identifier "a"; Symbol '['; IntConstant 3; Symbol '*'; IntConstant 10; Symbol ']'; Symbol '+'; StringConstant "dog"]
-let termTest3 = [Symbol '('; IntConstant 1; Symbol ')'; Symbol '*'; IntConstant 3]
-let termTest4 = [Keyword "null"]
-let termTest5 = [IntConstant 99]
-let termTest6 = [Identifier "boris"]
-let beforeOpTest = [Symbol '('; IntConstant 3; Symbol '+'; IntConstant 1; Symbol ')'; Symbol '-'; IntConstant 2]
-let returnTest = [Keyword "return"; Identifier "doSomething"; Symbol '('; IntConstant 2; Symbol '+'; IntConstant 1; 
-  Symbol ','; StringConstant "dog"; Symbol ','; Identifier "i"; Symbol ')'; Symbol ';'] 
-let subroutineCallTest2 = [Identifier "point"; Symbol '.'; Identifier "doSomething"; Symbol '('; IntConstant 1; Symbol '+'; IntConstant 2; Symbol '-'; IntConstant 1;
-                           Symbol ')']
-let doTest = [Keyword "do"; Identifier "doSomething"; Symbol '('; IntConstant 1; Symbol '+'; IntConstant 2;
-Symbol ','; StringConstant "dog"; Symbol ','; Identifier "i"; Symbol ')'; Symbol ';']
-let statementsTest = List.concat [letTest; doTest; returnTest]
-let subroutineBodyTest = List.concat [[Symbol '{'; Keyword "var"; Keyword "int"; Identifier "i"; Symbol ','; Identifier "x"; Symbol ','; Identifier "j"; Symbol ';'; 
-  Keyword "var"; Identifier "String"; Identifier "s"; Symbol ';';]; statementsTest; [Symbol '}']]
-let subroutineDecsTest = List.concat[
-  [Keyword "function";
-  Keyword "void";
-  Identifier "more";
-  Symbol '(';  
-  Identifier "Point";
-  Identifier "p";
-  Symbol ',';
-  Keyword "int";
-  Identifier "i";
-  Symbol ',';
-  Keyword "boolean";
-  Identifier "b";
-  Symbol ')';];
-  subroutineBodyTest;
- [Keyword "constructor";
-  Keyword "int";
-  Identifier "main";
-  Symbol '(';
-  Symbol ')';
-  Symbol '{';
-  Symbol '}']]
-let ifStatementTest = [Keyword "if"; Symbol '('; Symbol '('; IntConstant 1; Symbol '+'; IntConstant 3; Symbol ')'; Symbol '='; 
-  IntConstant 4; Symbol ')'; Symbol '{'; Keyword "do"; Identifier "someFunction"; Symbol '('; Identifier "i"; Symbol ')'; Symbol ';'; Symbol '}';
-  Keyword "else"; Symbol '{'; Keyword "do"; Identifier "someOtherFunction"; Symbol '('; IntConstant 69; Symbol ')'; Symbol ';'; Symbol '}';
-  Identifier "No"; Identifier "Surprises"; Identifier "Please"]
-let ifStatementTest2 = [Keyword "if"; Symbol '('; Symbol '('; IntConstant 1; Symbol '+'; IntConstant 3; Symbol ')'; Symbol '='; 
-  IntConstant 4; Symbol ')'; Symbol '{'; Keyword "do"; Identifier "someFunction"; Symbol '('; StringConstant "dog"; Symbol ')'; Symbol ';'; Symbol '}';
-  Identifier "No"; Identifier "Surprises"; Identifier "Please"]
-//printfn "%A" (getTokensBeforeOp beforeOpTest)
-//printfn "%A" (advanceUntilMatchingBracket (Symbol '(') (Symbol ')') [Symbol '('; Symbol '('; IntConstant 1; Symbol '+'; IntConstant 3; Symbol ')'; 
- // Symbol '='; IntConstant 4; Symbol ')' ])
-let whileStatementTest = [Keyword "while"; Symbol '('; Identifier "i"; Symbol '='; IntConstant 2; Symbol ')'; Symbol '{';
-  Keyword "let"; Identifier "x"; Symbol '='; IntConstant 2; Symbol '+'; IntConstant 3; Symbol ';';
-  Keyword "let"; Identifier "x"; Symbol '['; IntConstant 5; Symbol '-'; IntConstant 2; Symbol ']'; Symbol '='; StringConstant "dog"; Symbol ';';
-  Symbol '}'; Identifier "No"; Identifier "Surprises"; Identifier "Please"]
-let expressionListTest = [IntConstant 4; Symbol '+'; IntConstant 2; Symbol ','; StringConstant "dog"; Symbol '+'; StringConstant "cat"; Symbol ','; Identifier "i"]
-
-let classTest = List.concat [[Keyword "class"; Identifier "Point"; Symbol '{'] ; classVarDecsTest; subroutineDecsTest; [Symbol '}']]
-
-let emptyBracketsTest = [Symbol '{'; Symbol '}']
-let st = SymbolTable.add "HEIGHT" "int" SymbolTable.Static ( SymbolTable.add "b" "boolean" SymbolTable.Arg (SymbolTable.add "p" "Point" SymbolTable.Arg (SymbolTable.add "x" "int" SymbolTable.Arg (SymbolTable.add "i" "int" SymbolTable.Var (SymbolTable.add "foo" "string" SymbolTable.Var (SymbolTable.create()))))))
-//printfn "%A" (CompileExpression expressionTest2 st)
-//printfn ""
-//printfn "%A" (CompileTerm [Identifier "foo"] st)
-//printfn ""
-//printfn "%A" (CompileTerm [Identifier "foo"; Symbol '['; IntConstant 5; Symbol ']']  st)
-//printfn ""
-//printfn "%A" (CompileTerm [Identifier "bar"; Symbol '('; IntConstant 3; Symbol ')'] st)
-//printfn ""
-//printfn "%A" (CompileTerm [Identifier "foo"; Symbol '.'; Identifier "FunkName"; Symbol '('; IntConstant 3; Symbol ','; StringConstant "slop"; Symbol ')']  st)
-//printfn ""
-//printfn "%A" (CompileTerm [Identifier "notInTableHA"; Symbol '.'; Identifier "FunkName"; Symbol '('; IntConstant 3; Symbol ','; StringConstant "slop"; Symbol ')']  st)
-//printfn ""
-//printfn "%A" (CompileLetStatement letTest2 st)
-//printfn ""
-//printfn "%A" (CompileDoStatement doTest  st)
-//printfn ""
-//printfn "%A" (CompileReturnStatement returnTest false st)
-//printfn ""
-//printfn "%A" (CompileIfStatement ifStatementTest false 2 st)
-//printfn ""
-//printfn "%A" (CompileIfStatement ifStatementTest2 false 2 st)
-//printfn ""
-////printfn "%A" (CompileWhileStatement whileStatementTest 0 st)
-//printfn ""
-////printfn "%A" (CompileStatements statementsTest 0 st)
-//printfn ""
-//printfn "%A" (CompileVarDecs varDecsTest2 (SymbolTable.create())) 
-//printfn ""
-//printfn "%A" (CompileVarDecs varDecsTest st)
-//printfn ""
-//printfn "%A" (CompileClassVarDecs classVarDecsTest st)
-//printfn ""
-//printfn "%A" (CompileParameterList paramTest (SymbolTable.create()))
-//printfn ""
-////printfn "%A" (CompileSubroutineBody subroutineBodyTest 4 st)
-//printfn ""
-//printfn "%A" (CompileSubroutineDecs subroutineDecsTest  3 st)
-//printfn ""
-//printfn "%A" (CompileClass classTest)
-//printfn ""
-//printfn "%A" (CompileExpressionList expressionListTest st)
-//printfn ""
-//printfn "%A" (CompileExpressionList [IntConstant 8001; Symbol ','; IntConstant 16; Symbol ','; IntConstant -1] st)
-//printfn ""
-//printfn "%A" (CompileExpressionList [IntConstant 2] st)
-printfn "%A" (CompileExpression [Symbol '('; IntConstant 1; Symbol '*'; IntConstant 3; Symbol ')'; Symbol '+'; IntConstant 2] st)
-printfn ""
-printfn "%A" (CompileExpression [Symbol '-'; IntConstant 1; Symbol '+'; IntConstant 4] st)
-printfn ""
-printfn "%A" (CompileExpression [IntConstant 2; Symbol '+'; IntConstant 5; Symbol '+'; IntConstant 1] st)
-printfn ""
-printfn "%A" (CompileTerm [IntConstant 2] st)
-printfn ""
-printfn "%A" (CompileTerm [IntConstant 5] st)
-printfn ""
-printfn "%A" (CompileExpression [IntConstant 3; Symbol '+'; IntConstant 4; Symbol '-'; IntConstant 2] st)
-printfn ""
-printfn "%A" (CompileExpression [Symbol '('; Symbol '-'; IntConstant 1; Symbol ')'] st)
-printfn ""
-printfn "%A" (CompileExpression [Symbol '('; Symbol '('; IntConstant 2; Symbol '+'; IntConstant 1; Symbol ')'; Symbol '+'; IntConstant 1; Symbol ')'; Symbol '-'; IntConstant 1] st)
-printfn ""
-printfn "%A" (CompileTerm [Symbol '('; Symbol '-'; IntConstant 1; Symbol ')'] st)
-printfn ""
-printfn "%A" (CompileTerm [Symbol '-'; IntConstant 1] st)
-printfn ""
-printfn "%A" (CompileExpression [ Symbol '('; IntConstant 69; Symbol '+'; IntConstant 33;  Symbol ')'; Symbol '+'; IntConstant 42] st)
-printfn ""
-//printfn "%A" (CompileExpressionList [IntConstant 33; Symbol ','; IntConstant 22; Symbol '+'; IntConstant 39; Symbol ','; Symbol '('; IntConstant 2; Symbol '+'; IntConstant 1; Symbol ')'] st)
-printfn ""
-printfn "%A" (CompileExpression [Symbol '-'; IntConstant 1; Symbol '+'; IntConstant 3] st)
-printfn ""
-//printfn "%A" (CompileLetStatement [Keyword "let"; Identifier "x"; Symbol '='; Identifier "Main"; Symbol '.'; Identifier "peek"; Symbol '('; IntConstant 8000; Symbol ')'; Symbol ';'] st)
-printfn "%A" (CompileExpression [ Identifier "Main"; Symbol '.'; Identifier "peek"; Symbol '('; IntConstant 8000; Symbol ')'] st)
-(*
-printfn "%A" (CompileClass classTest)
-printfn ""
-printfn "%A" (CompileSubroutineDecs subroutineDecsTest)
-//printfn "%A" (getConsecutivePatterns (fun x -> false) (fun x -> false) [Symbol ';'; Identifier "plop"]) 
-printfn ""
-printfn "%A" (CompileSubroutineBody emptyBracketsTest)
-printfn ""
-printfn "%A" (CompileSubroutineBody subroutineBodyTest)
-printfn ""
-printfn "%A" (CompileVarDecs [Symbol '{'; Symbol '}'])
-printfn ""
-printfn "%A" (CompileVarDecs varDecsTest)
-printfn ""
-printfn "%A" (CompileClassVarDecs classVarDecsTest)
-printfn ""
-printfn "%A" (CompileIfStatement ifStatementTest2 1)
-printfn ""
-printfn "%A" (CompileExpressionList expressionListTest 1)
-printfn ""
-printfn "%A" (CompileWhileStatement whileStatementTest 1)
-printfn ""
-printfn "%A" (CompileIfStatement ifStatementTest 1)
-printfn ""
-printfn "%A" (CompileStatements statementsTest 1)
-printfn ""
-printfn "%A" (CompileReturnStatement returnTest 1)
-printfn ""
-printfn "%A" (CompileLetStatement letTest 1)
-printfn ""
-printfn "%A" (CompileLetStatement letTest2 1)
-printfn ""
-printfn "%A" (CompileDoStatement doTest 1)
-printfn ""
-printfn "%A" (CompileReturnStatement [Keyword "return"; Symbol ';'] 1)
-//printfn "%A" (CompileExpression [IntConstant 2; Symbol '+'; IntConstant 1])
-//printfn ""
-//printfn "%A" (CompileExpressionList [IntConstant 2; Symbol '+'; IntConstant 1])
-//printfn ""
-//printfn "%A" (CompileExpression expressionTest2)
-//printfn ""
-//printfn "%A" (CompileExpression termTest3)
-//printfn ""
-//printfn "%A" (CompileExpression termTest2)
-//printfn "%A" (wrapXml "expression" (wrapXml "term" "dog"))
-//printfn "%A" (CompileTerm termTest3) 
-//printfn "%A" (CompileTerm termTest4) 
-//printfn "%A" (CompileTerm termTest5) 
-//printfn "%A" (CompileTerm termTest6) 
-//printfn "%A" (CompileExpression expressionTest2) 
-//printfn "%A" (CompileLetStatement letTest)  
-//printfn "%A" (CompileVarDecs varDecsTest)
-//printfn "%A" (CompileParameterList paramTest2)
-//printfn "%A" (CompileParameterList paramTest1)
-//printfn "%A" (CompileParameterList paramTest)
-//printfn "%A" (doOneSubroutineDec oneSubroutineTest)
-//printfn "%A" (advanceUntilMatchingCurlyBracket curlyBracketsTest2)
-//printfn "%A" (advanceUntilMatchingCurlyBracket curlyBracketsTest)
-//printfn "%A" (CompileSubroutineDecs subroutineDecsTest)
-//printfn "%A" (getConsecutivePatterns (fun x -> x = (Keyword "static")) (fun x -> x = (Symbol ';')) classVarDecsTest)
-//printfn "%A" (CompileClassVarDecs testTokens)
-//printfn "%A" (CompileClassVarDecs classVarDecsTest)
-//printfn "%A" ((isOneOfTokens [(Keyword "nut"); (Identifier "salad"); (Keyword "int"); (Symbol '{')]) [(Identifier "Point"); (Identifier "string")]) 
-//printfn "%A" ((isOneOfTokens [(Keyword "nut"); (Identifier "Point"); (Keyword "int"); (Symbol '{')]) [(Identifier "Point"); (Identifier "string")]) 
-//printfn "%A" (isTypeProgramStructure [(Keyword "nut")]) 
-//printfn "%A" (isTypeProgramStructure [(Keyword "int")]) 
-//printfn "%A" (isTypeProgramStructure [(Keyword "char")]) 
-//printfn "%A" (isTypeProgramStructure [(Keyword "boolean")]) 
-//printfn "%A" (isTypeProgramStructure [(Identifier "Point")]) 
-//printfn "%A" (CompileClass classTokens)
-//printfn "%A" (eatIf (isSameToken (Symbol '}')) testTokens2)
-//printfn "%A" (eatIf (isSameToken (Keyword "var")) testTokens)
-//printfn "%A" (getNextTokenIf (isSameType (Identifier "dog")) testTokens)
-//printfn "%A" (getNextTokenIf (isSameToken (Identifier "var")) testTokens)
-//printfn "%A" (getNextTokenIf (isSameToken (Keyword "var")) testTokens)
-//printfn "%A" (getNextTokenIf (isSameType (Keyword "_")) testTokens)
-//printfn "%A" (advanceUntil (fun x -> x = (Symbol ';')) testTokens true)
-//printfn "%A" (getConsecutivePatterns (fun x -> x = (Keyword "var")) (fun x -> x = (Symbol ';')) testTokens)
-*)
